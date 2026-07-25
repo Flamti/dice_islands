@@ -10,6 +10,8 @@ signal log_message(text: String)
 signal connection_lost
 signal match_started
 signal turn_state_changed(turn_state: Dictionary)
+## Событие партии из ядра (ход, катастрофа) для ленты событий (SPEC §7).
+signal party_event(event: Dictionary)
 
 const DEFAULT_PORT := 7777
 const MIN_SLOTS := 2
@@ -168,6 +170,7 @@ func host_start_match(timers: Dictionary) -> bool:
 		"generator_json": _read_data_file("generator.json"),
 		"buildings_json": _read_data_file("buildings.json"),
 		"dice_json": _read_data_file("dice.json"),
+		"disasters_json": _read_data_file("disasters.json"),
 	})
 	if not result["ok"]:
 		_broadcast_log("Старт партии отклонён ядром: %s" % result["reason"])
@@ -202,8 +205,11 @@ func _process(delta: float) -> void:
 		return
 	var events: Array = _core.tick(delta)
 	for event in events:
-		if event["type"] == "turn_started":
-			_broadcast_log("— Ход %s —" % event["payload"]["turn"])
+		match event["type"]:
+			"turn_started":
+				_broadcast_party_event(event)
+			"disaster":
+				_broadcast_party_event(event)
 	var need_sync := not events.is_empty()
 	# Оставшееся время таймера транслируется периодически (SPEC §12.2).
 	if float(turn_state.get("timer_remaining_sec", -1.0)) >= 0.0:
@@ -327,6 +333,11 @@ func _rpc_receive_turn_state(new_turn_state: Dictionary) -> void:
 	turn_state_changed.emit(turn_state)
 
 
+@rpc("authority", "call_remote", "reliable")
+func _rpc_party_event(event: Dictionary) -> void:
+	party_event.emit(event)
+
+
 # --- Логика хоста ------------------------------------------------------------
 
 
@@ -349,6 +360,13 @@ func _broadcast_turn_state() -> void:
 	turn_state_changed.emit(turn_state)
 	if multiplayer.multiplayer_peer != null:
 		_rpc_receive_turn_state.rpc(turn_state)
+
+
+## Событие ядра (ход, катастрофа) в ленту партии — виден всем (SPEC §7.1).
+func _broadcast_party_event(event: Dictionary) -> void:
+	party_event.emit(event)
+	if multiplayer.multiplayer_peer != null:
+		_rpc_party_event.rpc(event)
 
 
 func _host_set_ready(peer_id: int, ready: bool) -> void:

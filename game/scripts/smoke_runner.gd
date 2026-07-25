@@ -47,6 +47,8 @@ var _build_spot := Vector2i(-1, -1)
 var _reroll_sent := false
 var _reroll_expected_ok := false
 var _dice_checked := false
+var _party_events_seen := 0
+var _danger_active := false
 
 
 func _ready() -> void:
@@ -188,6 +190,8 @@ func _mhost_on_turn_state(turn_state: Dictionary) -> void:
 func _run_mguest() -> void:
 	NetSession.turn_state_changed.connect(_mguest_on_turn_state)
 	NetSession.intent_confirmed.connect(_mguest_on_intent)
+	# Этап 7: лента событий партии доходит до гостя по RPC.
+	NetSession.party_event.connect(func(_event: Dictionary) -> void: _party_events_seen += 1)
 	var err: Error = NetSession.join_match(LOCALHOST, SMOKE_PORT, SMOKE_PASSWORD, "смоук-гость")
 	if err != OK:
 		_fail("create_client: код %d" % err)
@@ -196,6 +200,9 @@ func _run_mguest() -> void:
 func _mguest_on_turn_state(turn_state: Dictionary) -> void:
 	if not turn_state.get("active", false):
 		return
+	# Этап 7: система опасности активна по сети (danger_max дошёл до гостя).
+	if int(turn_state.get("danger_max", 0)) > 0:
+		_danger_active = true
 	var turn: int = turn_state["turn"]
 	var phase: int = turn_state["phase"]
 
@@ -235,6 +242,14 @@ func _mguest_on_turn_state(turn_state: Dictionary) -> void:
 		# Этап 5: кубики и реролл проверены в фазе Бросков.
 		if not _dice_checked:
 			_fail("сценарий кубиков не завершён")
+			return
+		# Этап 7: система опасности активна и лента событий доходит по сети
+		# (маркеры хода приходят как party_event).
+		if not _danger_active:
+			_fail("система опасности не активна по сети (нет danger_max)")
+			return
+		if _party_events_seen <= 0:
+			_fail("лента событий партии не дошла до гостя")
 			return
 		NetSession.leave()
 		_pass_and_quit("SMOKE_MGUEST_OK")

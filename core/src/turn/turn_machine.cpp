@@ -2,6 +2,7 @@
 
 #include "ecs/components.hpp"
 #include "ecs/components_building.hpp"
+#include "ecs/components_disaster.hpp"
 
 #include <algorithm>
 #include <string>
@@ -117,6 +118,7 @@ void start_match(entt::registry &registry, const MatchConfig &config, std::vecto
         info.alive = true;
         registry.emplace<ecs::PhaseReady>(entity);
         registry.emplace<ecs::Resources>(entity);
+        registry.emplace<ecs::DangerMeter>(entity);
     }
 
     state.turn = 1;
@@ -205,6 +207,8 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
     }
 
     const auto *dice_catalog = registry.try_get<const ecs::DiceCatalog>(match);
+    const auto *disaster_catalog = registry.try_get<const ecs::DisasterCatalog>(match);
+    snapshot.danger_max = disaster_catalog != nullptr ? disaster_catalog->danger_max : 0;
     auto view = registry.view<const ecs::PlayerInfo, const ecs::PhaseReady, const ecs::Resources>();
     for (auto [entity, info, ready, res] : view.each()) {
         PlayerSnapshot player;
@@ -220,6 +224,8 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
         player.hammers = res.hammers;
         player.swords = res.swords;
         player.culture = res.culture;
+        const auto *meter = registry.try_get<const ecs::DangerMeter>(entity);
+        player.danger = meter != nullptr ? meter->value : 0;
         const auto *dice = registry.try_get<const ecs::PlayerDice>(entity);
         if (dice != nullptr && dice_catalog != nullptr) {
             player.rerolls_left = dice->rerolls_left;

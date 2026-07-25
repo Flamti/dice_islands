@@ -1,9 +1,11 @@
 #include "dicecore/core.hpp"
 
 #include "ecs/components_building.hpp"
+#include "ecs/components_disaster.hpp"
 #include "gen/island_gen.hpp"
 #include "math/rng.hpp"
 #include "net/intents.hpp"
+#include "systems/danger.hpp"
 #include "systems/dice.hpp"
 #include "systems/economy.hpp"
 #include "systems/placement.hpp"
@@ -134,6 +136,17 @@ bool Match::start(const MatchConfig &config, std::string &error) {
         const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
         impl_->registry.emplace<ecs::DiceCatalog>(match, std::move(catalog));
     }
+    if (!config.disasters_json.empty()) {
+        ecs::DisasterCatalog catalog;
+        std::string parse_error;
+        if (!systems::parse_disasters_json(config.disasters_json, catalog, parse_error)) {
+            impl_->registry.clear();
+            error = kErrorBadDisastersConfig;
+            return false;
+        }
+        const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
+        impl_->registry.emplace<ecs::DisasterCatalog>(match, std::move(catalog));
+    }
     impl_->active = true;
     error.clear();
     return true;
@@ -169,7 +182,7 @@ std::vector<Event> Match::tick(double dt) {
     }
     // Эффекты фаз (SPEC §4) выполняются в момент входа, до продвижения дальше
     // внутри того же тика: активация -> сбор пула -> бросок -> конвертация.
-    const turn::PhaseHook hook = [](entt::registry &registry, Phase phase) {
+    const turn::PhaseHook hook = [&events](entt::registry &registry, Phase phase) {
         switch (phase) {
             case Phase::TurnStart:
                 systems::activate_constructions(registry);
@@ -185,6 +198,9 @@ std::vector<Event> Match::tick(double dt) {
                 break;
             case Phase::Resources:
                 systems::apply_dice_income(registry);
+                break;
+            case Phase::Disasters:
+                systems::resolve_danger_phase(registry, events);
                 break;
             default:
                 break;

@@ -38,7 +38,10 @@ const char *const kKeyIslandSeed = "island_seed";
 const char *const kKeyGeneratorJson = "generator_json";
 const char *const kKeyBuildingsJson = "buildings_json";
 const char *const kKeyDiceJson = "dice_json";
+const char *const kKeyDisastersJson = "disasters_json";
 const char *const kKeyMatchSeed = "match_seed";
+const char *const kKeyDanger = "danger";
+const char *const kKeyDangerMax = "danger_max";
 const char *const kKeyDice = "dice";
 const char *const kKeyFace = "face";
 const char *const kKeyCrosses = "crosses";
@@ -91,6 +94,7 @@ godot::Dictionary DiceCoreServer::start_match(const godot::Dictionary &config) {
     core_config.generator_json = to_std_string(config.get(kKeyGeneratorJson, godot::String()));
     core_config.buildings_json = to_std_string(config.get(kKeyBuildingsJson, godot::String()));
     core_config.dice_json = to_std_string(config.get(kKeyDiceJson, godot::String()));
+    core_config.disasters_json = to_std_string(config.get(kKeyDisastersJson, godot::String()));
     core_config.match_seed = static_cast<uint64_t>(int64_t(config.get(kKeyMatchSeed, 0)));
 
     const godot::Dictionary timers = config.get(kKeyTimers, godot::Dictionary());
@@ -141,6 +145,7 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
     out[kKeyPhase] = snapshot.phase;
     out[kKeyIsDecision] = snapshot.is_decision;
     out[kKeyTimerRemaining] = snapshot.timer_remaining_sec;
+    out[kKeyDangerMax] = snapshot.danger_max;
 
     godot::Array players;
     for (const PlayerSnapshot &player : snapshot.players) {
@@ -159,6 +164,7 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
         resources["swords"] = player.swords;
         resources["culture"] = player.culture;
         entry[kKeyResources] = resources;
+        entry[kKeyDanger] = player.danger;
         entry[kKeyRerollsLeft] = player.rerolls_left;
         godot::Array dice;
         for (const DieSnapshot &die : player.dice) {

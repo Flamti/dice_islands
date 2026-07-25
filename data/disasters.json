@@ -1,0 +1,19 @@
+{
+  "danger_max": 12,
+  "thresholds": [
+    { "value": 4, "tier": 1 },
+    { "value": 7, "tier": 2 },
+    { "value": 10, "tier": 3 },
+    { "value": 12, "tier": 4 }
+  ],
+  "disasters": {
+    "thieves": {
+      "name": "Воры",
+      "tier": 1,
+      "target": "self",
+      "effect": "steal_resource",
+      "steal_percent": 25,
+      "steal_from": ["food", "wood", "stone", "gold"]
+    }
+  }
+}

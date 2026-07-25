@@ -52,6 +52,7 @@ inline constexpr const char *kErrorBadBuildingsConfig = "bad_buildings_config";
 inline constexpr const char *kErrorBadGeneratorConfig = "bad_generator_config";
 inline constexpr const char *kErrorNoCastleSpot = "no_castle_spot";
 inline constexpr const char *kErrorBadDiceConfig = "bad_dice_config";
+inline constexpr const char *kErrorBadDisastersConfig = "bad_disasters_config";
 
 // Максимум перебросов за ход (SPEC §6).
 inline constexpr int32_t kMaxRerolls = 2;
@@ -69,6 +70,7 @@ enum class BuildingStatus : int32_t {
 // Типы событий, порождаемых тиком партии.
 inline constexpr const char *kEventTurnStarted = "turn_started";
 inline constexpr const char *kEventPhaseEntered = "phase_entered";
+inline constexpr const char *kEventDisaster = "disaster"; // катастрофа сработала
 
 // Фазы хода по SPEC §4 (утверждено 25.07.2026).
 enum class Phase : int32_t {
@@ -123,6 +125,7 @@ struct MatchConfig {
     std::string generator_json;
     std::string buildings_json;
     std::string dice_json;
+    std::string disasters_json;
 };
 
 // Плоское намерение игрока: тип + строковая полезная нагрузка.
@@ -175,8 +178,9 @@ struct PlayerSnapshot {
     int32_t hammers = 0;
     int32_t swords = 0;
     int32_t culture = 0;
+    int32_t danger = 0; // текущее заполнение шкалы опасности (SPEC §7.1)
     int32_t rerolls_left = 0;
-    std::vector<DieSnapshot> dice; // пул между Доходом и Ресурсами, иначе пуст
+    std::vector<DieSnapshot> dice; // пул от Дохода до Катастроф, иначе пуст
 };
 
 // Снимок здания для UI.
@@ -199,6 +203,7 @@ struct TurnSnapshot {
     int32_t phase = 0;
     bool is_decision = false;
     double timer_remaining_sec = -1.0; // < 0 — таймера нет (авто-фаза или без лимита)
+    int32_t danger_max = 0; // предел шкалы опасности; 0 — система опасности выкл.
     std::vector<PlayerSnapshot> players;
     std::vector<BuildingSnapshot> buildings;
 };

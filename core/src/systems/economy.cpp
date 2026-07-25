@@ -36,7 +36,8 @@ void apply_dice_income(entt::registry &registry) {
             resources.hammers += face.gain.hammers;
             resources.swords += face.gain.swords;
             resources.culture += face.gain.culture;
-            // Кресты не начисляются: сгорают в шкалу опасности (этап 7).
+            // Кресты не начисляются ресурсами: они уходят в шкалу опасности
+            // (фаза Катастроф, systems/danger). Пул очищается там же.
         }
         resources.wood = clamp_to_cap(resources.wood, catalog->caps.wood);
         resources.stone = clamp_to_cap(resources.stone, catalog->caps.stone);
@@ -45,8 +46,6 @@ void apply_dice_income(entt::registry &registry) {
         resources.hammers = clamp_to_cap(resources.hammers, catalog->caps.hammers);
         resources.swords = clamp_to_cap(resources.swords, catalog->caps.swords);
         resources.culture = clamp_to_cap(resources.culture, catalog->caps.culture);
-        dice.dice.clear();
-        dice.rerolls_left = 0;
     }
 }
 

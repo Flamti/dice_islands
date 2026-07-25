@@ -9,6 +9,8 @@ const IslandScene := preload("res://scenes/island.tscn")
 const BuildPanelScene := preload("res://ui/build_panel.tscn")
 const DiceTrayScene := preload("res://ui/dice_tray.tscn")
 const ResourceBarScene := preload("res://ui/resource_bar.tscn")
+const DangerMeterScene := preload("res://ui/danger_meter.tscn")
+const EventFeedScene := preload("res://ui/event_feed.tscn")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -49,6 +51,8 @@ var _island_view: Node3D
 var _build_panel: Control
 var _dice_tray: Control
 var _resource_bar: Control
+var _danger_meter: Control
+var _event_feed: Control
 
 
 func _ready() -> void:
@@ -287,6 +291,10 @@ func _on_match_started() -> void:
 	add_child(_dice_tray)
 	_resource_bar = ResourceBarScene.instantiate()
 	add_child(_resource_bar)
+	_danger_meter = DangerMeterScene.instantiate()
+	add_child(_danger_meter)
+	_event_feed = EventFeedScene.instantiate()
+	add_child(_event_feed)
 
 
 func _on_match_leave_requested() -> void:
@@ -311,6 +319,12 @@ func _close_match_view() -> void:
 	if _resource_bar != null:
 		_resource_bar.queue_free()
 		_resource_bar = null
+	if _danger_meter != null:
+		_danger_meter.queue_free()
+		_danger_meter = null
+	if _event_feed != null:
+		_event_feed.queue_free()
+		_event_feed = null
 
 
 # --- Реакция на события сети -------------------------------------------------
