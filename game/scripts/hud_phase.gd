@@ -4,6 +4,8 @@ extends VBoxContainer
 
 signal leave_requested
 
+const BuildingStatus := preload("res://scripts/building_status.gd")
+
 const PHASE_NAMES: Array[String] = [
 	"Начало", "Еда", "Доход", "Броски", "Ресурсы",
 	"Катастрофы", "Развитие", "Набеги", "Бой", "Проверки",
@@ -84,12 +86,13 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 		_ready_button.set_pressed_no_signal(false)
 	_ready_button.visible = is_decision
 
-	_rebuild_players(turn_state["players"])
+	_rebuild_players(turn_state["players"], turn_state.get("buildings", []))
 
 
-func _rebuild_players(players: Array) -> void:
+func _rebuild_players(players: Array, buildings: Array) -> void:
 	for child in _players_box.get_children():
 		child.queue_free()
+	var starving_by_player := _count_starving(buildings)
 	for player in players:
 		var row := Label.new()
 		var tags: Array[String] = []
@@ -99,6 +102,9 @@ func _rebuild_players(players: Array) -> void:
 			tags.append("выбыл")
 		if player["ready"]:
 			tags.append("готов")
+		var starving := int(starving_by_player.get(player["id"], 0))
+		if starving > 0:
+			tags.append("голод: %d" % starving)
 		var suffix: String = " (%s)" % ", ".join(tags) if not tags.is_empty() else ""
 		var res: Dictionary = player["resources"]
 		row.text = "Игрок %d | команда %d%s | Д:%d К:%d З:%d Е:%d М:%d" % [
@@ -106,3 +112,13 @@ func _rebuild_players(players: Array) -> void:
 			res["wood"], res["stone"], res["gold"], res["food"], res["hammers"],
 		]
 		_players_box.add_child(row)
+
+
+## player_id -> число зданий со статусом Starving (SPEC §4 фаза 1).
+func _count_starving(buildings: Array) -> Dictionary:
+	var result := {}
+	for building in buildings:
+		if building["status"] == BuildingStatus.STATUS_STARVING:
+			var pid: int = building["player_id"]
+			result[pid] = int(result.get(pid, 0)) + 1
+	return result

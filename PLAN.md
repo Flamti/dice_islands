@@ -41,7 +41,7 @@
 - **Файлы:** `data/dice.json`, `core/src/systems/dice.*`, `core/src/systems/economy.*`, `core/tests/test_dice.cpp`, `game/ui/dice_tray.tscn`, `game/scripts/dice_tray.gd`, `game/ui/resource_bar.tscn`
 - **Тест:** здания дают кубики; кресты невозможно выделить для переброса; ресурсы начисляются согласно `data/dice.json`; излишек сверх капа сгорает.
 
-## [ ] Этап 6. Еда и голод
+## [x] Этап 6. Еда и голод
 
 Фаза Еды: апкип 1 еда/здание; нехватка → `Starving` в случайном порядке, детерминированном RNG хоста (SPEC §4, решение от 25.07.2026); `Starving` не даёт кубик; индикация голода.
 

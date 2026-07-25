@@ -7,6 +7,7 @@
 #include "systems/dice.hpp"
 #include "systems/economy.hpp"
 #include "systems/placement.hpp"
+#include "systems/upkeep.hpp"
 #include "turn/turn_machine.hpp"
 
 #include <entt/entt.hpp>
@@ -118,6 +119,10 @@ bool Match::start(const MatchConfig &config, std::string &error) {
         impl_->registry.clear();
         return false;
     }
+    // Единственный RNG партии (SPEC §12.1); соль отделяет его от производных
+    // сидов островов. Нужен всем системам с случайностью (кубики, голод).
+    impl_->registry.emplace<ecs::MatchRng>(impl_->registry.view<ecs::MatchState>().front(),
+            ecs::MatchRng{math::mix_seed(config.match_seed, 0xD1CEB0A7)});
     if (!config.dice_json.empty()) {
         ecs::DiceCatalog catalog;
         std::string parse_error;
@@ -128,9 +133,6 @@ bool Match::start(const MatchConfig &config, std::string &error) {
         }
         const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
         impl_->registry.emplace<ecs::DiceCatalog>(match, std::move(catalog));
-        // Соль отделяет RNG партии от производных сидов островов.
-        impl_->registry.emplace<ecs::MatchRng>(match,
-                ecs::MatchRng{math::mix_seed(config.match_seed, 0xD1CEB0A7)});
     }
     impl_->active = true;
     error.clear();
@@ -171,6 +173,9 @@ std::vector<Event> Match::tick(double dt) {
         switch (phase) {
             case Phase::TurnStart:
                 systems::activate_constructions(registry);
+                break;
+            case Phase::Food:
+                systems::apply_food_upkeep(registry);
                 break;
             case Phase::Income:
                 systems::collect_income(registry);

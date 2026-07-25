@@ -5,6 +5,7 @@ extends Node3D
 
 const GridOverlay := preload("res://scripts/grid_overlay.gd")
 const BuildingStubScene := preload("res://scenes/building_stub.tscn")
+const BuildingStatus := preload("res://scripts/building_status.gd")
 
 const ATLAS_TEXTURE := preload("res://assets/atlas_placeholder.png")
 ## Путь к конфигу генератора относительно res:// (data/ живёт в корне репо).
@@ -14,16 +15,11 @@ const CAMERA_OFFSET := Vector3(0, 34, 28)
 const ISLANDS_GROUP := "islands"
 const VIEW_GROUP := "island_view"
 
-## Заглушки зданий: высота коробки и цвета по статусу (BuildingStatus ядра).
+## Заглушки зданий: высота коробки. Цвет/прозрачность по статусу — в
+## building_status.gd (общая точка соответствия BuildingStatus -> визуал).
 const STUB_HEIGHT := 1.6
 const STUB_CASTLE_HEIGHT := 3.0
 const STUB_FOOTPRINT_SCALE := 0.85 ## доля клетки под коробкой (зазор для читаемости)
-const STUB_COLOR_ACTIVE := Color(0.45, 0.5, 0.72)
-const STUB_COLOR_CASTLE := Color(0.6, 0.42, 0.72)
-const STUB_COLOR_CONSTRUCTION := Color(0.85, 0.8, 0.3, 0.6)
-const STUB_COLOR_OTHER := Color(0.5, 0.32, 0.3)
-const STATUS_UNDER_CONSTRUCTION := 0
-const STATUS_ACTIVE := 1
 
 var _camera: Camera3D
 ## player_id -> {"node": Node3D, "grid": Dictionary}
@@ -119,18 +115,11 @@ func _place_stub(stub: MeshInstance3D, building: Dictionary, grid: Dictionary) -
 		surface_y + height * 0.5,
 		grid["origin_z"] + (cz + building["size_z"] * 0.5) * cell
 	)
+	var status: int = building["status"]
 	var material := StandardMaterial3D.new()
-	var color: Color
-	if building["status"] == STATUS_UNDER_CONSTRUCTION:
-		color = STUB_COLOR_CONSTRUCTION
+	material.albedo_color = BuildingStatus.color_for(building["type"], status)
+	if BuildingStatus.is_translucent(status):
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	elif building["type"] == "castle":
-		color = STUB_COLOR_CASTLE
-	elif building["status"] == STATUS_ACTIVE:
-		color = STUB_COLOR_ACTIVE
-	else:
-		color = STUB_COLOR_OTHER
-	material.albedo_color = color
 	stub.material_override = material
 
 
