@@ -3,8 +3,13 @@ resources/
 
 # Godot
 .godot/
+.nomedia
 *.import
 export_presets.cfg
+export.cfg
+export_credentials.cfg
+*.tmp
+*.translation
 
 # Сборка C++ / GDExtension
 build/
