@@ -5,6 +5,7 @@
 #include "ecs/components_disaster.hpp"
 #include "ecs/components_research.hpp"
 #include "gen/island_gen.hpp"
+#include "systems/danger.hpp"
 #include "systems/economy.hpp"
 #include "systems/research.hpp"
 
@@ -133,7 +134,8 @@ void start_match(entt::registry &registry, const MatchConfig &config, std::vecto
 }
 
 void tick(entt::registry &registry, double dt, std::vector<Event> &events,
-        const PhaseHook &on_phase_entered) {
+        const PhaseHook &on_phase_entered, const HoldPredicate &is_held,
+        const HoldTimeout &on_hold_timeout) {
     const entt::entity match = match_entity(registry);
     auto &state = registry.get<ecs::MatchState>(match);
     const auto &timers = registry.get<const ecs::MatchTimers>(match);
@@ -157,6 +159,24 @@ void tick(entt::registry &registry, double dt, std::vector<Event> &events,
             }
             // Таймер истёк: решения автозавершаются, кубики фиксируются как есть.
             budget -= remaining;
+            advance_phase(registry, state, events, on_phase_entered);
+        } else if (is_held && is_held(registry, phase)) {
+            // Авто-фаза держится мини-решением (Тёмная магия): ждём выбор либо
+            // таймер kDarkChoiceTimeoutSec, затем разрешаем отложенное случайно.
+            const double remaining = kDarkChoiceTimeoutSec - state.phase_elapsed_sec;
+            if (budget < remaining) {
+                state.phase_elapsed_sec += budget;
+                return;
+            }
+            budget -= remaining;
+            if (on_hold_timeout) {
+                on_hold_timeout(registry, phase);
+            }
+            // hold снят (или снимется); phase_elapsed сбросится при переходе.
+            if (is_held(registry, phase)) {
+                // На всякий случай: если выбор не снят, не зацикливаемся.
+                state.phase_elapsed_sec = 0.0;
+            }
             advance_phase(registry, state, events, on_phase_entered);
         } else {
             const double remaining = kAutoPhaseDurationSec - state.phase_elapsed_sec;
@@ -230,6 +250,7 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
         player.culture = res.culture;
         const auto *meter = registry.try_get<const ecs::DangerMeter>(entity);
         player.danger = meter != nullptr ? meter->value : 0;
+        player.clairvoyance_tier = systems::clairvoyance_tier(registry, entity);
         // Исследования: доступность (активный университет) и изученное (SPEC §8).
         player.research_available = systems::has_active_university(registry, info.id);
         const auto *research = registry.try_get<const ecs::PlayerResearch>(entity);

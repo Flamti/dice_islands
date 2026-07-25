@@ -70,6 +70,7 @@ func _ready() -> void:
 	_camera.look_at_from_position(own_position + CAMERA_OFFSET, own_position, Vector3.UP)
 
 	NetSession.turn_state_changed.connect(_on_turn_state_changed)
+	NetSession.island_updated.connect(_on_island_updated)
 	if not NetSession.turn_state.is_empty():
 		_on_turn_state_changed(NetSession.turn_state)
 
@@ -238,15 +239,8 @@ func _build_island(core: Object, player_id: int, seed_value: int, config_text: S
 		push_error("Генерация острова отклонена ядром: %s" % result["reason"])
 		return null
 
-	var gltf := GLTFDocument.new()
-	var gltf_state := GLTFState.new()
-	var err := gltf.append_from_buffer(result["glb"], "", gltf_state)
-	if err != OK:
-		push_error("GLB не разобран (код %d)" % err)
-		return null
-	var mesh_root: Node = gltf.generate_scene(gltf_state)
+	var mesh_root := _mesh_from_glb(result["glb"])
 	if mesh_root == null:
-		push_error("GLB не дал сцены")
 		return null
 
 	var island := Node3D.new()
@@ -256,8 +250,43 @@ func _build_island(core: Object, player_id: int, seed_value: int, config_text: S
 	var overlay: Node3D = GridOverlay.new()
 	overlay.setup(result["grid"])
 	island.add_child(overlay)
-	_islands[player_id] = {"node": island, "grid": result["grid"]}
+	_islands[player_id] = {"node": island, "grid": result["grid"], "mesh": mesh_root}
 	return island
+
+
+## Загрузка меша острова из GLB-байтов (первичная и после деструкции).
+func _mesh_from_glb(glb: PackedByteArray) -> Node:
+	var gltf := GLTFDocument.new()
+	var gltf_state := GLTFState.new()
+	var err := gltf.append_from_buffer(glb, "", gltf_state)
+	if err != OK:
+		push_error("GLB не разобран (код %d)" % err)
+		return null
+	var mesh_root: Node = gltf.generate_scene(gltf_state)
+	if mesh_root == null:
+		push_error("GLB не дал сцены")
+	return mesh_root
+
+
+## Ре-полигонизация меша острова после деструкции ландшафта (SPEC §11.5).
+func _on_island_updated(update: Dictionary) -> void:
+	var player_id := int(update["player"])
+	var info: Dictionary = _islands.get(player_id, {})
+	if info.is_empty():
+		return
+	var new_mesh := _mesh_from_glb(update["glb"])
+	if new_mesh == null:
+		return
+	var island: Node3D = info["node"]
+	if info.get("mesh") != null and is_instance_valid(info["mesh"]):
+		(info["mesh"] as Node).queue_free()
+	island.add_child(new_mesh)
+	_apply_atlas_material(new_mesh)
+	info["mesh"] = new_mesh
+	_islands[player_id] = info
+	# Свой остров — обновляем коллизию под клики стройки.
+	if player_id == NetSession.my_player_id():
+		_create_collision(new_mesh)
 
 
 func _apply_atlas_material(node: Node) -> void:

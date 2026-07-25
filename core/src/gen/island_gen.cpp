@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace dicecore::gen {
 
@@ -36,6 +37,20 @@ constexpr float kGradientEps = 0.35f;
 struct DensityField {
     const GeneratorParams &params;
     const math::SimplexNoise &noise;
+    const std::set<int64_t> *carved = nullptr; // вырезанные клетки: (cz<<32)|cx
+
+    // Попадает ли (x, z) в вырезанную обрушением клетку (SPEC §11.5).
+    bool is_carved(float x, float z) const {
+        if (carved == nullptr || carved->empty()) {
+            return false;
+        }
+        const float origin = -0.5f * params.grid_cells * params.cell_size;
+        const int32_t cx = static_cast<int32_t>(std::floor((x - origin) / params.cell_size));
+        const int32_t cz = static_cast<int32_t>(std::floor((z - origin) / params.cell_size));
+        const int64_t key = (static_cast<int64_t>(static_cast<uint32_t>(cz)) << 32) |
+                static_cast<uint32_t>(cx);
+        return carved->count(key) != 0;
+    }
 
     float top_height_at(float x, float z) const {
         const float n = noise.fbm(x * params.top_noise_scale, kTopNoisePlane,
@@ -52,6 +67,9 @@ struct DensityField {
     }
 
     float sample(float x, float y, float z) const {
+        if (is_carved(x, z)) {
+            return -1000.0f; // вырезанный столбец — вне породы (нет поверхности)
+        }
         const float r = std::sqrt(x * x + z * z);
         const float edge = noise.fbm(x * params.edge_noise_scale, kEdgeNoisePlane,
                 z * params.edge_noise_scale, kFbmOctaves, kFbmGain);
@@ -289,11 +307,14 @@ bool params_from_json(const std::string &json_text, GeneratorParams &params, std
     return true;
 }
 
-IslandData generate_island(uint64_t seed, const GeneratorParams &params) {
+namespace {
+
+IslandData generate_island_impl(uint64_t seed, const GeneratorParams &params,
+        const std::set<int64_t> &carved) {
     IslandData island;
     const math::SimplexNoise noise(seed);
     math::Rng rng(math::mix_seed(seed, 0xD1CE));
-    const DensityField field{params, noise};
+    const DensityField field{params, noise, &carved};
 
     // Вертикальные пределы поля: рельеф + запас, чтобы поверхность замкнулась.
     const float y_top = params.top_height + params.top_amplitude + 2.0f;
@@ -334,6 +355,26 @@ IslandData generate_island(uint64_t seed, const GeneratorParams &params) {
     build_grid(island.grid, field, params, y_top, y_bottom);
     place_poi(island.grid, params, rng);
     return island;
+}
+
+std::set<int64_t> carved_set(const std::vector<GridCell> &cells) {
+    std::set<int64_t> set;
+    for (const GridCell &c : cells) {
+        set.insert((static_cast<int64_t>(static_cast<uint32_t>(c.cell_z)) << 32) |
+                static_cast<uint32_t>(c.cell_x));
+    }
+    return set;
+}
+
+} // namespace
+
+IslandData generate_island(uint64_t seed, const GeneratorParams &params) {
+    return generate_island_impl(seed, params, {});
+}
+
+IslandData generate_island_carved(uint64_t seed, const GeneratorParams &params,
+        const std::vector<GridCell> &carved) {
+    return generate_island_impl(seed, params, carved_set(carved));
 }
 
 GridData generate_grid(uint64_t seed, const GeneratorParams &params) {

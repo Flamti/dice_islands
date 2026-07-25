@@ -44,6 +44,10 @@ public:
     //   "frames": [ { "tick": int, "units": [ { id, team, attacker, x, z, hp } ] } ] }.
     godot::Array poll_battles();
 
+    // Обновления мешей островов после деструкции ландшафта (SPEC §11.5):
+    // [{ "player": int, "glb": PackedByteArray }].
+    godot::Array poll_island_updates();
+
     // Снапшот хода: { "active": bool, "turn": int, "phase": int,
     //   "is_decision": bool, "timer_remaining_sec": float (< 0 — нет таймера),
     //   "players": [{ "id", "team", "is_ai", "alive", "ready", "resources" }] }

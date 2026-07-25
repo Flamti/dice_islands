@@ -20,6 +20,9 @@ inline constexpr const char *kIntentReroll = "reroll";
 inline constexpr const char *kIntentHarvest = "harvest"; // добыча POI молотком
 inline constexpr const char *kIntentRaid = "raid"; // отправка рейда (SPEC §9.4)
 inline constexpr const char *kIntentResearch = "research"; // покупка узла (SPEC §8)
+inline constexpr const char *kIntentTargetPick = "target_pick"; // выбор цели (Тёмная магия)
+inline constexpr const char *kIntentCure = "cure"; // лечение болезни (SPEC §7.2)
+inline constexpr const char *kIntentStormRite = "storm_rite"; // Обряд бури (SPEC §8)
 
 // Ключи полезной нагрузки намерений.
 inline constexpr const char *kPayloadReady = "ready";
@@ -32,6 +35,7 @@ inline constexpr const char *kPayloadTargetBuilding = "target_building"; // ID �
 inline constexpr const char *kPayloadCount = "count";
 inline constexpr const char *kPayloadSide = "side"; // сторона высадки 0..3
 inline constexpr const char *kPayloadNode = "node"; // id узла исследования
+inline constexpr const char *kPayloadPick = "pick"; // выбор цели: "0" или "1"
 
 // Коды отказа валидации намерений.
 inline constexpr const char *kRejectUnknownIntent = "unknown_intent_type";
@@ -65,6 +69,14 @@ inline constexpr const char *kRejectUnknownNode = "unknown_research_node";
 inline constexpr const char *kRejectAlreadyResearched = "already_researched";
 inline constexpr const char *kRejectNodeLocked = "research_node_locked";
 inline constexpr const char *kRejectNotEnoughCulture = "not_enough_culture";
+inline constexpr const char *kRejectNoChoice = "no_pending_choice";
+inline constexpr const char *kRejectNotDiseased = "building_not_diseased";
+inline constexpr const char *kRejectNoDarkMagic = "no_dark_magic";
+inline constexpr const char *kRejectNoStormRite = "no_storm_rite";
+inline constexpr const char *kRejectStormRiteCooldown = "storm_rite_cooldown";
+
+// Таймер мини-решения выбора цели (Тёмная магия, SPEC §4/§8) [баланс].
+inline constexpr double kDarkChoiceTimeoutSec = 15.0;
 
 // Коды ошибок старта партии.
 inline constexpr const char *kErrorMatchAlreadyActive = "match_already_active";
@@ -96,6 +108,8 @@ inline constexpr const char *kEventPhaseEntered = "phase_entered";
 inline constexpr const char *kEventDisaster = "disaster"; // катастрофа сработала
 inline constexpr const char *kEventExpansion = "expansion"; // платформа достроила леса
 inline constexpr const char *kEventBattle = "battle"; // бой на острове разрешён
+inline constexpr const char *kEventTargetChoice = "target_choice"; // выбор цели (2 кандидата)
+inline constexpr const char *kEventLandscape = "landscape"; // деструкция ландшафта
 
 // Фазы хода по SPEC §4 (утверждено 25.07.2026).
 enum class Phase : int32_t {
@@ -224,6 +238,7 @@ struct PlayerSnapshot {
     int32_t cap_wood = 0;
     int32_t cap_stone = 0;
     int32_t danger = 0; // текущее заполнение шкалы опасности (SPEC §7.1)
+    int32_t clairvoyance_tier = 0; // предпросмотр тяжести (Ясновидение); 0 — нет
     int32_t rerolls_left = 0;
     bool research_available = false; // активный университет (SPEC §8)
     std::vector<DieSnapshot> dice; // пул от Дохода до Катастроф, иначе пуст
@@ -282,6 +297,13 @@ struct BattleLog {
     std::vector<BattleLogFrame> frames;
 };
 
+// Обновление меша острова после деструкции ландшафта (SPEC §11.5): новый GLB
+// для перезагрузки на клиенте.
+struct IslandUpdate {
+    int32_t player = 0;
+    std::vector<uint8_t> glb;
+};
+
 // Партия: реестр EnTT и Turn State Machine. Живёт только на хосте.
 class Match {
 public:
@@ -304,6 +326,9 @@ public:
     // Забрать и очистить логи боёв, разрешённых в последних тиках (для стрима
     // визуализации боя клиентам, SPEC §9.3).
     std::vector<BattleLog> take_battle_logs();
+
+    // Забрать обновления мешей островов после деструкции ландшафта (SPEC §11.5).
+    std::vector<IslandUpdate> take_island_updates();
 
     TurnSnapshot snapshot() const;
 

@@ -14,6 +14,8 @@ signal turn_state_changed(turn_state: Dictionary)
 signal party_event(event: Dictionary)
 ## Лог боя для проигрывания визуализации (SPEC §9.3).
 signal battle_ready(battle: Dictionary)
+## Обновление меша острова после деструкции ландшафта (SPEC §11.5).
+signal island_updated(update: Dictionary)
 
 const DEFAULT_PORT := 7777
 const MIN_SLOTS := 2
@@ -210,11 +212,14 @@ func _process(delta: float) -> void:
 	var events: Array = _core.tick(delta)
 	for event in events:
 		match event["type"]:
-			"turn_started", "disaster", "battle":
+			"turn_started", "disaster", "battle", "target_choice", "landscape":
 				_broadcast_party_event(event)
 	# Логи боёв фазы Боя -> проигрывание визуализации у всех (SPEC §9.3).
 	for battle in _core.poll_battles():
 		_broadcast_battle(battle)
+	# Ре-полигонизация островов после деструкции ландшафта (SPEC §11.5).
+	for update in _core.poll_island_updates():
+		_broadcast_island_update(update)
 	var need_sync := not events.is_empty()
 	# Оставшееся время таймера транслируется периодически (SPEC §12.2).
 	if float(turn_state.get("timer_remaining_sec", -1.0)) >= 0.0:
@@ -348,6 +353,16 @@ func _rpc_battle(battle: Dictionary) -> void:
 	battle_ready.emit(battle)
 
 
+@rpc("authority", "call_remote", "reliable")
+func _rpc_island_update(update: Dictionary) -> void:
+	island_updated.emit(update)
+
+
+## Барьер мини-решения: выбор цели Тёмной магией (SPEC §8).
+func pick_target(pick: int) -> void:
+	submit_intent({"type": "target_pick", "payload": {"pick": str(pick)}})
+
+
 # --- Логика хоста ------------------------------------------------------------
 
 
@@ -384,6 +399,13 @@ func _broadcast_battle(battle: Dictionary) -> void:
 	battle_ready.emit(battle)
 	if multiplayer.multiplayer_peer != null:
 		_rpc_battle.rpc(battle)
+
+
+## Обновлённый меш острова всем участникам (SPEC §11.5).
+func _broadcast_island_update(update: Dictionary) -> void:
+	island_updated.emit(update)
+	if multiplayer.multiplayer_peer != null:
+		_rpc_island_update.rpc(update)
 
 
 func _host_set_ready(peer_id: int, ready: bool) -> void:

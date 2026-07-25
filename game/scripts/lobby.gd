@@ -14,6 +14,7 @@ const EventFeedScene := preload("res://ui/event_feed.tscn")
 const BattleViewScene := preload("res://scenes/battle_view.tscn")
 const RaidPanelScene := preload("res://ui/raid_panel.tscn")
 const ResearchScreenScene := preload("res://ui/research_screen.tscn")
+const TargetPickScene := preload("res://ui/target_pick.tscn")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -59,6 +60,7 @@ var _event_feed: Control
 var _battle_view: Node3D
 var _raid_panel: Control
 var _research_screen: Control
+var _target_pick: Control
 
 
 func _ready() -> void:
@@ -307,6 +309,8 @@ func _on_match_started() -> void:
 	add_child(_raid_panel)
 	_research_screen = ResearchScreenScene.instantiate()
 	add_child(_research_screen)
+	_target_pick = TargetPickScene.instantiate()
+	add_child(_target_pick)
 
 
 func _on_match_leave_requested() -> void:
@@ -346,6 +350,9 @@ func _close_match_view() -> void:
 	if _research_screen != null:
 		_research_screen.queue_free()
 		_research_screen = null
+	if _target_pick != null:
+		_target_pick.queue_free()
+		_target_pick = null
 
 
 # --- Реакция на события сети -------------------------------------------------

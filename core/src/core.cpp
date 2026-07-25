@@ -2,6 +2,7 @@
 
 #include "ecs/components_building.hpp"
 #include "ecs/components_disaster.hpp"
+#include "gen/glb_export.hpp"
 #include "gen/island_gen.hpp"
 #include "math/rng.hpp"
 #include "net/intents.hpp"
@@ -46,6 +47,10 @@ struct Match::Impl {
     entt::registry registry;
     bool active = false;
     std::vector<BattleLog> battle_logs; // накоплены в фазе Боя, отдаются адаптеру
+    std::vector<IslandUpdate> island_updates; // ре-полигонизация после деструкции
+    // Параметры генератора и сиды островов — для ре-генерации меша (SPEC §11.5).
+    gen::GeneratorParams gen_params;
+    std::map<int32_t, uint64_t> island_seeds;
 
     entt::entity find_player_entity(int32_t player_id) {
         for (auto [entity, info] : registry.view<const ecs::PlayerInfo>().each()) {
@@ -54,6 +59,32 @@ struct Match::Impl {
             }
         }
         return entt::null;
+    }
+
+    // Игроки с dirty-вырезкой: ре-полигонизуем меш с вырезанными клетками и
+    // складываем новый GLB для рассылки клиентам (SPEC §11.5).
+    void regenerate_carved_islands() {
+        for (auto [entity, carved] : registry.view<ecs::PlayerCarved>().each()) {
+            if (!carved.dirty) {
+                continue;
+            }
+            carved.dirty = false;
+            const int32_t player_id = registry.get<const ecs::PlayerInfo>(entity).id;
+            const auto seed_it = island_seeds.find(player_id);
+            if (seed_it == island_seeds.end()) {
+                continue;
+            }
+            std::vector<gen::GridCell> cells;
+            for (const ecs::CarvedCell &c : carved.cells) {
+                cells.push_back({c.cell_x, c.cell_z});
+            }
+            const gen::IslandData island =
+                    gen::generate_island_carved(seed_it->second, gen_params, cells);
+            IslandUpdate update;
+            update.player = player_id;
+            update.glb = gen::export_glb(island);
+            island_updates.push_back(std::move(update));
+        }
     }
 
     // Стройплощадка партии: каталог зданий, сетки островов, стартовые
@@ -66,7 +97,6 @@ struct Match::Impl {
             error = kErrorBadBuildingsConfig;
             return false;
         }
-        gen::GeneratorParams gen_params;
         if (!config.generator_json.empty() &&
                 !gen::params_from_json(config.generator_json, gen_params, parse_error)) {
             error = kErrorBadGeneratorConfig;
@@ -78,6 +108,7 @@ struct Match::Impl {
 
         for (const PlayerConfig &player : config.players) {
             const entt::entity entity = find_player_entity(player.id);
+            island_seeds[player.id] = player.island_seed;
             const gen::GridData grid_data = gen::generate_grid(player.island_seed, gen_params);
             auto &grid = registry.emplace<ecs::PlayerGrid>(entity);
             grid.cells_x = grid_data.cells_x;
@@ -216,8 +247,8 @@ std::vector<Event> Match::tick(double dt) {
     const turn::PhaseHook hook = [&events, &battle_logs](entt::registry &registry, Phase phase) {
         switch (phase) {
             case Phase::TurnStart:
-                // Активация построек, затем расширение платформами (SPEC §11.4):
-                // платформа активируется и в тот же вход достраивает леса.
+                // Активация построек, снятие Disabled, расширение платформами.
+                systems::restore_disabled(registry);
                 systems::activate_constructions(registry);
                 systems::expand_platforms(registry, events);
                 break;
@@ -244,7 +275,26 @@ std::vector<Event> Match::tick(double dt) {
                 break;
         }
     };
-    turn::tick(impl_->registry, dt, events, hook);
+    const turn::HoldPredicate is_held = [](const entt::registry &registry, Phase phase) {
+        return phase == Phase::Disasters && systems::disasters_held(registry);
+    };
+    const turn::HoldTimeout on_hold_timeout = [&events](entt::registry &registry, Phase phase) {
+        if (phase == Phase::Disasters) {
+            systems::resolve_pending_choices_random(registry, events);
+        }
+    };
+    turn::tick(impl_->registry, dt, events, hook, is_held, on_hold_timeout);
+
+    // События, порождённые вне тика (выбор цели Тёмной магией) — в общий поток.
+    const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
+    if (auto *queue = impl_->registry.try_get<ecs::EventQueue>(match)) {
+        for (Event &e : queue->events) {
+            events.push_back(std::move(e));
+        }
+        queue->events.clear();
+    }
+    // Ре-полигонизация островов после деструкции ландшафта (SPEC §11.5).
+    impl_->regenerate_carved_islands();
     return events;
 }
 
@@ -252,6 +302,12 @@ std::vector<BattleLog> Match::take_battle_logs() {
     std::vector<BattleLog> logs;
     logs.swap(impl_->battle_logs);
     return logs;
+}
+
+std::vector<IslandUpdate> Match::take_island_updates() {
+    std::vector<IslandUpdate> updates;
+    updates.swap(impl_->island_updates);
+    return updates;
 }
 
 TurnSnapshot Match::snapshot() const {

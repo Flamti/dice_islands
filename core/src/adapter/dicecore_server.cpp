@@ -177,6 +177,20 @@ godot::Array DiceCoreServer::poll_battles() {
     return out;
 }
 
+godot::Array DiceCoreServer::poll_island_updates() {
+    godot::Array out;
+    for (const IslandUpdate &update : match_.take_island_updates()) {
+        godot::Dictionary entry;
+        entry["player"] = update.player;
+        godot::PackedByteArray glb;
+        glb.resize(static_cast<int64_t>(update.glb.size()));
+        memcpy(glb.ptrw(), update.glb.data(), update.glb.size());
+        entry["glb"] = glb;
+        out.push_back(entry);
+    }
+    return out;
+}
+
 godot::Dictionary DiceCoreServer::get_turn_state() const {
     const TurnSnapshot snapshot = match_.snapshot();
 
@@ -211,6 +225,7 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
         caps["stone"] = player.cap_stone;
         entry["caps"] = caps;
         entry[kKeyDanger] = player.danger;
+        entry["clairvoyance_tier"] = player.clairvoyance_tier;
         entry["research_available"] = player.research_available;
         godot::Array research;
         for (const std::string &effect : player.research) {
@@ -335,6 +350,8 @@ void DiceCoreServer::_bind_methods() {
             godot::D_METHOD("submit_intent", "player_id", "intent"), &DiceCoreServer::submit_intent);
     godot::ClassDB::bind_method(godot::D_METHOD("tick", "dt"), &DiceCoreServer::tick);
     godot::ClassDB::bind_method(godot::D_METHOD("poll_battles"), &DiceCoreServer::poll_battles);
+    godot::ClassDB::bind_method(
+            godot::D_METHOD("poll_island_updates"), &DiceCoreServer::poll_island_updates);
     godot::ClassDB::bind_method(godot::D_METHOD("get_turn_state"), &DiceCoreServer::get_turn_state);
     godot::ClassDB::bind_method(
             godot::D_METHOD("generate_island", "seed", "config_json"), &DiceCoreServer::generate_island);

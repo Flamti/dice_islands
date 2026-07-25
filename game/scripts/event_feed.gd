@@ -48,15 +48,27 @@ func _format(event: Dictionary) -> String:
 			var defender := int(payload.get("defender", -1)) + 1
 			return "Бой на острове игрока %d: разрушено зданий %s, защитников осталось %s" % [
 				defender, payload.get("destroyed", "0"), payload.get("defenders_left", "?")]
+		"landscape":
+			return "Обрушение края у игрока %d: откололось клеток %s" % [
+				int(payload.get("player", -1)) + 1, payload.get("cells", "?")]
+		"target_choice":
+			return "Игрок %d выбирает цель Тёмной магии" % (int(payload.get("chooser", -1)) + 1)
 		_:
 			return ""
 
 
+const DISASTER_NAMES := {
+	"thieves": "Воры", "lightning": "Удар молнии", "disease": "Болезнь",
+	"sabotage": "Саботаж", "storm": "Шторм", "pirates": "Нашествие пиратов",
+	"meteor": "Метеорит", "edge_collapse": "Обрушение края",
+}
+
+
 func _format_disaster(payload: Dictionary) -> String:
-	var player := int(payload.get("player", -1)) + 1
-	match payload.get("disaster", ""):
-		"thieves":
-			var res: String = RESOURCE_NAMES.get(payload.get("resource", ""), payload.get("resource", "?"))
-			return "Воры у игрока %d: украдено %s %s" % [player, payload.get("amount", "?"), res]
-		_:
-			return "Катастрофа «%s» у игрока %d" % [payload.get("disaster", "?"), player]
+	var id: String = payload.get("disaster", "?")
+	var name: String = DISASTER_NAMES.get(id, id)
+	var victim := int(payload.get("victim", payload.get("player", -1))) + 1
+	if id == "thieves":
+		var res: String = RESOURCE_NAMES.get(payload.get("resource", ""), payload.get("resource", "?"))
+		return "Воры у игрока %d: украдено %s %s" % [victim, payload.get("amount", "?"), res]
+	return "«%s» у игрока %d" % [name, victim]

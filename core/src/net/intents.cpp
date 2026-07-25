@@ -1,5 +1,6 @@
 #include "net/intents.hpp"
 
+#include "systems/danger.hpp"
 #include "systems/dice.hpp"
 #include "systems/placement.hpp"
 #include "systems/poi.hpp"
@@ -40,6 +41,15 @@ IntentResult dispatch_intent(entt::registry &registry, int32_t player_id, const 
     }
     if (intent.type == kIntentResearch) {
         return systems::handle_research(registry, player_id, intent);
+    }
+    if (intent.type == kIntentTargetPick) {
+        return systems::handle_target_pick(registry, player_id, intent);
+    }
+    if (intent.type == kIntentCure) {
+        return systems::handle_cure(registry, player_id, intent);
+    }
+    if (intent.type == kIntentStormRite) {
+        return systems::handle_storm_rite(registry, player_id, intent);
     }
     // Стейтлес-намерения (echo) не требуют реестра.
     return process_intent(intent);

@@ -77,7 +77,18 @@ struct IslandData {
     GridData grid;
 };
 
+// Клетка сетки (для списка вырезанных обрушением клеток).
+struct GridCell {
+    int32_t cell_x = 0;
+    int32_t cell_z = 0;
+};
+
 IslandData generate_island(uint64_t seed, const GeneratorParams &params);
+
+// Генерация с вырезанными клетками (деструктор ландшафта, SPEC §11.5): в
+// столбцах этих клеток поверхность удаляется (Void), меш ре-полигонизуется.
+IslandData generate_island_carved(uint64_t seed, const GeneratorParams &params,
+        const std::vector<GridCell> &carved);
 
 // Только данные сетки, без полигонизации: быстрый путь для хоста (валидация
 // строительства). Гарантированно совпадает с generate_island(...).grid.

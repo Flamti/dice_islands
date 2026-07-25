@@ -71,6 +71,7 @@ struct Building {
     int32_t hp = 1;
     int32_t status = static_cast<int32_t>(BuildingStatus::UnderConstruction);
     bool expanded = false; // платформа уже достроила леса (SPEC §11.4)
+    int32_t restore_turn = 0; // Disabled: ход, с которого здание снова Active
 };
 
 // Свободная клетка в карте занятости (entt::null как uint32).

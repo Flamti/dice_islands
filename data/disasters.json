@@ -15,12 +15,59 @@
       "steal_percent": 25,
       "steal_from": ["food", "wood", "stone", "gold"]
     },
+    "lightning": {
+      "name": "Удар молнии",
+      "tier": 1,
+      "target": "opponent",
+      "effect": "damage_random_building",
+      "damage": 8
+    },
+    "disease": {
+      "name": "Болезнь",
+      "tier": 2,
+      "target": "self",
+      "effect": "disease",
+      "spread_percent": 35,
+      "cure_gold": 2
+    },
+    "sabotage": {
+      "name": "Саботаж",
+      "tier": 2,
+      "target": "opponent",
+      "effect": "disable_random_building"
+    },
+    "storm": {
+      "name": "Шторм",
+      "tier": 3,
+      "target": "self",
+      "effect": "storm",
+      "scaffold_damage": 6,
+      "scaffold_destroy_percent": 50,
+      "land_damage": 4,
+      "land_targets": 3
+    },
     "pirates": {
       "name": "Нашествие пиратов",
       "tier": 3,
       "target": "opponent",
       "effect": "pirate_raid",
       "pirate_count": 6
+    },
+    "meteor": {
+      "name": "Метеорит",
+      "tier": 4,
+      "target": "opponent",
+      "effect": "meteor",
+      "damage": 20,
+      "radius": 1
+    },
+    "edge_collapse": {
+      "name": "Обрушение края",
+      "tier": 4,
+      "target": "self",
+      "effect": "edge_collapse",
+      "min_cells": 6,
+      "max_cells": 10
     }
   }
 }
