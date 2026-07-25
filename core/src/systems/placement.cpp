@@ -139,6 +139,8 @@ bool parse_buildings_json(const std::string &json_text, ecs::BuildingCatalog &ca
     catalog.starting_resources.gold = starting.int_at("gold", 0);
     catalog.starting_resources.food = starting.int_at("food", 0);
     catalog.starting_resources.hammers = starting.int_at("hammers", 0);
+    catalog.starting_resources.swords = starting.int_at("swords", 0);
+    catalog.starting_resources.culture = starting.int_at("culture", 0);
 
     for (const auto &[id, def_json] : root.as_object().at("buildings").as_object()) {
         ecs::BuildingDef def;

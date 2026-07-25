@@ -18,6 +18,7 @@ inline constexpr const char *kIntentBuild = "build";
 inline constexpr const char *kIntentDemolish = "demolish";
 inline constexpr const char *kIntentReroll = "reroll";
 inline constexpr const char *kIntentHarvest = "harvest"; // добыча POI молотком
+inline constexpr const char *kIntentRaid = "raid"; // отправка рейда (SPEC §9.4)
 
 // Ключи полезной нагрузки намерений.
 inline constexpr const char *kPayloadReady = "ready";
@@ -25,6 +26,10 @@ inline constexpr const char *kPayloadBuilding = "building";
 inline constexpr const char *kPayloadCellX = "cell_x";
 inline constexpr const char *kPayloadCellZ = "cell_z";
 inline constexpr const char *kPayloadDice = "dice"; // индексы через запятую: "0,2,5"
+inline constexpr const char *kPayloadTargetPlayer = "target_player";
+inline constexpr const char *kPayloadTargetBuilding = "target_building"; // ID сущности
+inline constexpr const char *kPayloadCount = "count";
+inline constexpr const char *kPayloadSide = "side"; // сторона высадки 0..3
 
 // Коды отказа валидации намерений.
 inline constexpr const char *kRejectUnknownIntent = "unknown_intent_type";
@@ -47,6 +52,12 @@ inline constexpr const char *kRejectBadDiceSelection = "bad_dice_selection";
 inline constexpr const char *kRejectCrossLocked = "cross_locked";
 inline constexpr const char *kRejectNotEdge = "not_on_edge";
 inline constexpr const char *kRejectNoPoiHere = "no_poi_here";
+inline constexpr const char *kRejectNoPort = "no_active_port";
+inline constexpr const char *kRejectBadRaidTarget = "bad_raid_target";
+inline constexpr const char *kRejectBadRaidCount = "bad_raid_count";
+inline constexpr const char *kRejectNotEnoughGarrison = "not_enough_garrison";
+inline constexpr const char *kRejectRaidLimit = "raid_limit_reached";
+inline constexpr const char *kRejectAllyTarget = "cannot_raid_ally";
 
 // Коды ошибок старта партии.
 inline constexpr const char *kErrorMatchAlreadyActive = "match_already_active";

@@ -37,6 +37,8 @@ struct CombatConfig {
     int32_t tower_damage = 3;
     float tower_rate = 0.8f; // выстрелов/с
     int32_t pirate_count = 6;
+    int32_t raid_capacity = 8; // бойцов в рейде игрока (SPEC §9.4)
+    int32_t raids_per_turn = 1; // рейдов за ход (узел «Стратегия» — 2)
 };
 
 // Здание на поле боя.
@@ -94,6 +96,7 @@ struct GroupOutcome {
     int32_t owner_player = -1;
     int32_t survivors = 0;
     bool target_destroyed = false;
+    bool got_reward = false; // эта группа нанесла последний удар по своей цели
 };
 
 struct BattleResult {

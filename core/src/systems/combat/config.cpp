@@ -22,6 +22,8 @@ bool parse_combat_json(const std::string &json_text, CombatConfig &config, std::
             root.int_at("wall_defense_armor_bonus", defaults.wall_defense_armor_bonus);
     config.wall_detour_factor =
             static_cast<float>(root.number_at("wall_detour_factor", defaults.wall_detour_factor));
+    config.raid_capacity = root.int_at("raid_capacity", defaults.raid_capacity);
+    config.raids_per_turn = root.int_at("raids_per_turn", defaults.raids_per_turn);
 
     if (root.has("fighter")) {
         const save::JsonValue &f = root.as_object().at("fighter");

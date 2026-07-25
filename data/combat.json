@@ -5,6 +5,8 @@
   "frame_interval_ticks": 4,
   "wall_defense_armor_bonus": 1,
   "wall_detour_factor": 1.0,
+  "raid_capacity": 8,
+  "raids_per_turn": 1,
   "fighter": {
     "hp": 10,
     "strength": 2,

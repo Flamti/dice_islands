@@ -63,10 +63,12 @@ struct Battle {
     std::vector<SimFighter> fighters;
     std::vector<SimBuilding> buildings;
     std::vector<int32_t> occupancy; // cell -> building index или -1
+    std::vector<int32_t> last_hit_group; // building index -> группа последнего удара
     int32_t next_id = 0;
 
     explicit Battle(const BattleSetup &s, uint64_t seed) : setup(s), cfg(s.config), rng(seed) {
         occupancy.assign(static_cast<size_t>(setup.cells_x) * setup.cells_z, -1);
+        last_hit_group.assign(setup.buildings.size(), -1);
         buildings.reserve(setup.buildings.size());
         for (const BattleBuilding &b : setup.buildings) {
             SimBuilding sb;
@@ -279,11 +281,17 @@ struct Battle {
         return true;
     }
 
-    void damage_building(SimBuilding &b, int32_t amount, std::vector<int32_t> &destroyed) {
+    void damage_building(int32_t index, int32_t amount, int32_t attacker_group,
+            std::vector<int32_t> &destroyed) {
+        SimBuilding &b = buildings[index];
         if (!b.alive) {
             return;
         }
         b.hp -= amount;
+        // Кто нанёс последний удар (для награды за цель, SPEC §9.3).
+        if (attacker_group >= 0) {
+            last_hit_group[index] = attacker_group;
+        }
         if (b.hp <= 0) {
             b.alive = false;
             destroyed.push_back(b.def.id);
@@ -483,7 +491,7 @@ BattleResult simulate_battle(const BattleSetup &setup, uint64_t seed) {
                         }
                         if (adjacent) {
                             if (f.attack_cd <= 0.0f) {
-                                battle.damage_building(battle.buildings[target], cfg.fighter.strength,
+                                battle.damage_building(target, cfg.fighter.strength, f.group,
                                         result.destroyed_buildings);
                                 f.attack_cd = 1.0f / cfg.fighter.attack_rate;
                             }
@@ -524,7 +532,7 @@ BattleResult simulate_battle(const BattleSetup &setup, uint64_t seed) {
                 const int32_t wall = f.attacker ? wall_at(battle, next.first, next.second) : -1;
                 if (wall >= 0) {
                     if (f.attack_cd <= 0.0f) {
-                        battle.damage_building(battle.buildings[wall], cfg.fighter.strength,
+                        battle.damage_building(wall, cfg.fighter.strength, f.group,
                                 result.destroyed_buildings);
                         f.attack_cd = 1.0f / cfg.fighter.attack_rate;
                     }
@@ -590,6 +598,10 @@ BattleResult simulate_battle(const BattleSetup &setup, uint64_t seed) {
         outcome.team = setup.attackers[gi].team;
         outcome.owner_player = setup.attackers[gi].owner_player;
         outcome.target_destroyed = group_target_destroyed[gi];
+        // Награду получает лишь группа, нанёсшая последний удар по цели.
+        const int32_t target = group_target[gi];
+        outcome.got_reward = group_target_destroyed[gi] && target >= 0 &&
+                battle.last_hit_group[target] == static_cast<int32_t>(gi);
         for (const SimFighter &f : battle.fighters) {
             if (f.attacker && f.group == static_cast<int32_t>(gi) && f.alive) {
                 ++outcome.survivors; // f.alive охватывает и отступивших

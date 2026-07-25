@@ -12,6 +12,7 @@ const ResourceBarScene := preload("res://ui/resource_bar.tscn")
 const DangerMeterScene := preload("res://ui/danger_meter.tscn")
 const EventFeedScene := preload("res://ui/event_feed.tscn")
 const BattleViewScene := preload("res://scenes/battle_view.tscn")
+const RaidPanelScene := preload("res://ui/raid_panel.tscn")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -55,6 +56,7 @@ var _resource_bar: Control
 var _danger_meter: Control
 var _event_feed: Control
 var _battle_view: Node3D
+var _raid_panel: Control
 
 
 func _ready() -> void:
@@ -299,6 +301,8 @@ func _on_match_started() -> void:
 	add_child(_event_feed)
 	_battle_view = BattleViewScene.instantiate()
 	add_child(_battle_view)
+	_raid_panel = RaidPanelScene.instantiate()
+	add_child(_raid_panel)
 
 
 func _on_match_leave_requested() -> void:
@@ -332,6 +336,9 @@ func _close_match_view() -> void:
 	if _battle_view != null:
 		_battle_view.queue_free()
 		_battle_view = null
+	if _raid_panel != null:
+		_raid_panel.queue_free()
+		_raid_panel = null
 
 
 # --- Реакция на события сети -------------------------------------------------

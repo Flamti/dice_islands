@@ -156,11 +156,12 @@ void resolve_combat_phase(entt::registry &registry, std::vector<Event> &events,
             if (group.owner_player < 0) {
                 continue; // пираты — без возврата и награды
             }
-            // Рейды игроков (этап 10): выжившие возвращаются в гарнизон.
+            // Рейды игроков: выжившие возвращаются в гарнизон; награду 30%
+            // получает лишь нанёсший последний удар по цели (SPEC §9.3, §16.3).
             const entt::entity owner = find_player(registry, group.owner_player);
             if (owner != entt::null) {
                 registry.get<ecs::Resources>(owner).swords += group.survivors;
-                if (group.target_destroyed) {
+                if (group.got_reward) {
                     grant_reward(registry.get<ecs::Resources>(owner), defender_res,
                             config->reward_percent);
                 }
