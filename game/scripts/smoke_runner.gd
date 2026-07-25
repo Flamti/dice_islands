@@ -49,6 +49,9 @@ var _reroll_expected_ok := false
 var _dice_checked := false
 var _party_events_seen := 0
 var _danger_active := false
+var _harvest_sent := false
+var _harvest_confirmed := false
+var _poi_cell := Vector2i(-1, -1)
 
 
 func _ready() -> void:
@@ -203,6 +206,12 @@ func _mguest_on_turn_state(turn_state: Dictionary) -> void:
 	# Этап 7: система опасности активна по сети (danger_max дошёл до гостя).
 	if int(turn_state.get("danger_max", 0)) > 0:
 		_danger_active = true
+	# Этап 8: запоминаем первый свой POI для добычи.
+	if _poi_cell.x < 0:
+		var mine := _my_player(turn_state)
+		var pois: Array = mine.get("pois", [])
+		if not pois.is_empty():
+			_poi_cell = Vector2i(int(pois[0]["cell_x"]), int(pois[0]["cell_z"]))
 	var turn: int = turn_state["turn"]
 	var phase: int = turn_state["phase"]
 
@@ -251,6 +260,10 @@ func _mguest_on_turn_state(turn_state: Dictionary) -> void:
 		if _party_events_seen <= 0:
 			_fail("лента событий партии не дошла до гостя")
 			return
+		# Этап 8: добыча POI подтверждена хостом.
+		if not _harvest_confirmed:
+			_fail("добыча POI не подтверждена")
+			return
 		NetSession.leave()
 		_pass_and_quit("SMOKE_MGUEST_OK")
 
@@ -258,6 +271,13 @@ func _mguest_on_turn_state(turn_state: Dictionary) -> void:
 func _mguest_on_intent(result: Dictionary) -> void:
 	if result["type"] == "reroll" and _reroll_sent and not _dice_checked:
 		_mguest_on_reroll(result)
+		return
+	# Этап 8: добыча POI молотком.
+	if result["type"] == "harvest":
+		if not result["accepted"]:
+			_fail("добыча POI отклонена: %s" % result["reason"])
+			return
+		_harvest_confirmed = true
 		return
 	if result["type"] != "build":
 		return
@@ -276,6 +296,11 @@ func _mguest_on_intent(result: Dictionary) -> void:
 			_fail("повторная стройка не отклонена как cell_occupied: %s" % result)
 			return
 		_reject_seen = true
+		# После стройки добываем POI (стартовых молотков 2: ферма + добыча).
+		if _poi_cell.x >= 0 and not _harvest_sent:
+			_harvest_sent = true
+			NetSession.submit_intent({"type": "harvest", "payload": {
+				"cell_x": str(_poi_cell.x), "cell_z": str(_poi_cell.y)}})
 
 
 func _mguest_check_barrier() -> void:

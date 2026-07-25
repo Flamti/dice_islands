@@ -6,6 +6,12 @@ extends Node3D
 const GridOverlay := preload("res://scripts/grid_overlay.gd")
 const BuildingStubScene := preload("res://scenes/building_stub.tscn")
 const BuildingStatus := preload("res://scripts/building_status.gd")
+const ScaffoldTileScene := preload("res://scenes/scaffold_tile.tscn")
+
+const SCAFFOLD_COLOR := Color(0.72, 0.6, 0.38, 0.85)
+const POI_STONE_COLOR := Color(0.55, 0.55, 0.6)
+const POI_WOOD_COLOR := Color(0.5, 0.33, 0.15)
+const POI_MARKER_SIZE := Vector3(0.9, 0.9, 0.9)
 
 const ATLAS_TEXTURE := preload("res://assets/atlas_placeholder.png")
 ## Путь к конфигу генератора относительно res:// (data/ живёт в корне репо).
@@ -26,6 +32,9 @@ var _camera: Camera3D
 var _islands := {}
 ## id здания -> MeshInstance3D
 var _building_nodes := {}
+## player_id -> { "cell_x,cell_z": Node3D } для лесов и POI
+var _scaffold_nodes := {}
+var _poi_nodes := {}
 
 
 func _ready() -> void:
@@ -74,6 +83,10 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 	if not turn_state.get("active", false):
 		return
 	_sync_buildings(turn_state.get("buildings", []))
+	# Леса и POI динамичны (платформы, добыча) — обновляем из снапшота.
+	for player in turn_state.get("players", []):
+		_sync_scaffolds(int(player["id"]), player.get("scaffolds", []))
+		_sync_pois(int(player["id"]), player.get("pois", []))
 
 
 ## Синхронизация заглушек зданий со снапшотом хода.
@@ -95,6 +108,82 @@ func _sync_buildings(buildings: Array) -> void:
 		if not alive_ids.has(id):
 			_building_nodes[id].queue_free()
 			_building_nodes.erase(id)
+
+
+## Клетки-леса острова игрока (SPEC §11.4). Для своего острова добавляем
+## коллизию, чтобы на лесах можно было строить кликом.
+func _sync_scaffolds(player_id: int, scaffolds: Array) -> void:
+	var info: Dictionary = _islands.get(player_id, {})
+	if info.is_empty():
+		return
+	var grid: Dictionary = info["grid"]
+	var nodes: Dictionary = _scaffold_nodes.get(player_id, {})
+	var alive := {}
+	var own := player_id == NetSession.my_player_id()
+	for cell in scaffolds:
+		var key := "%d,%d" % [int(cell["cell_x"]), int(cell["cell_z"])]
+		alive[key] = true
+		if nodes.has(key):
+			continue
+		var tile := ScaffoldTileScene.instantiate()
+		(info["node"] as Node3D).add_child(tile)
+		tile.position = _cell_center(grid, int(cell["cell_x"]), int(cell["cell_z"]), 1, 1)
+		var material := StandardMaterial3D.new()
+		material.albedo_color = SCAFFOLD_COLOR
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		(tile.get_node("Mesh") as MeshInstance3D).material_override = material
+		# Коллизия под клик стройки нужна только на своём острове.
+		(tile.get_node("Collision") as CollisionShape3D).disabled = not own
+		nodes[key] = tile
+	for key in nodes.keys():
+		if not alive.has(key):
+			nodes[key].queue_free()
+			nodes.erase(key)
+	_scaffold_nodes[player_id] = nodes
+
+
+## POI-маркеры острова игрока из снапшота (исчезают при добыче).
+func _sync_pois(player_id: int, pois: Array) -> void:
+	var info: Dictionary = _islands.get(player_id, {})
+	if info.is_empty():
+		return
+	var grid: Dictionary = info["grid"]
+	var nodes: Dictionary = _poi_nodes.get(player_id, {})
+	var alive := {}
+	for poi in pois:
+		var key := "%d,%d" % [int(poi["cell_x"]), int(poi["cell_z"])]
+		alive[key] = true
+		if nodes.has(key):
+			continue
+		var marker := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = POI_MARKER_SIZE
+		marker.mesh = box
+		var material := StandardMaterial3D.new()
+		material.albedo_color = POI_STONE_COLOR if poi["kind"] == "stone" else POI_WOOD_COLOR
+		marker.material_override = material
+		var pos := _cell_center(grid, int(poi["cell_x"]), int(poi["cell_z"]), 1, 1)
+		marker.position = pos + Vector3(0, POI_MARKER_SIZE.y * 0.5, 0)
+		(info["node"] as Node3D).add_child(marker)
+		nodes[key] = marker
+	for key in nodes.keys():
+		if not alive.has(key):
+			nodes[key].queue_free()
+			nodes.erase(key)
+	_poi_nodes[player_id] = nodes
+
+
+## Центр области клеток (cx,cz)+(size) на поверхности острова.
+func _cell_center(grid: Dictionary, cx: int, cz: int, size_x: int, size_z: int) -> Vector3:
+	var cell: float = grid["cell_size"]
+	var heights: PackedFloat32Array = grid["heights"]
+	var cells_x: int = grid["cells_x"]
+	var surface_y: float = heights[cz * cells_x + cx]
+	return Vector3(
+		grid["origin_x"] + (cx + size_x * 0.5) * cell,
+		surface_y,
+		grid["origin_z"] + (cz + size_z * 0.5) * cell
+	)
 
 
 func _place_stub(stub: MeshInstance3D, building: Dictionary, grid: Dictionary) -> void:

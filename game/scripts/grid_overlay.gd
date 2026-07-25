@@ -1,6 +1,7 @@
 extends Node3D
 ## Оверлей строительной сетки (SPEC §11.3): полупрозрачные квадраты клеток
-## поверх острова (зелёный — Buildable, красный — Blocked) и маркеры POI.
+## поверх острова (зелёный — Buildable, красный — Blocked). Маркеры POI и
+## клетки-леса динамичны и рисуются island_view из снапшота хода.
 ## Только отображение: данные сетки считает ядро.
 
 ## Типы клеток — значения enum CellType ядра (core/src/gen/island_gen.hpp).
@@ -12,9 +13,6 @@ const OVERLAY_LIFT := 0.06 ## подъём квадратов над повер�
 const CELL_INSET := 0.08 ## отступ квадрата от границ клетки
 const BUILDABLE_COLOR := Color(0.2, 0.9, 0.3, 0.28)
 const BLOCKED_COLOR := Color(0.9, 0.25, 0.2, 0.28)
-const POI_STONE_COLOR := Color(0.55, 0.55, 0.6)
-const POI_WOOD_COLOR := Color(0.5, 0.33, 0.15)
-const POI_MARKER_SIZE := Vector3(0.9, 0.9, 0.9)
 
 const GRIDS_GROUP := "island_grids"
 
@@ -62,9 +60,7 @@ func setup(grid: Dictionary) -> void:
 	mesh_instance.material_override = material
 	add_child(mesh_instance)
 
-	for poi in grid["poi"]:
-		_add_poi_marker(poi, origin, cell, heights, cells_x)
-		poi_count += 1
+	poi_count = grid["poi"].size()
 
 
 func _add_quad(surface: SurfaceTool, color: Color, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
@@ -80,23 +76,3 @@ func _add_quad(surface: SurfaceTool, color: Color, a: Vector3, b: Vector3, c: Ve
 	surface.add_vertex(d)
 	surface.set_color(color)
 	surface.add_vertex(c)
-
-
-func _add_poi_marker(poi: Dictionary, origin: Vector3, cell: float,
-		heights: PackedFloat32Array, cells_x: int) -> void:
-	var marker := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = POI_MARKER_SIZE
-	marker.mesh = box
-	var material := StandardMaterial3D.new()
-	material.albedo_color = POI_STONE_COLOR if poi["kind"] == "stone" else POI_WOOD_COLOR
-	marker.material_override = material
-	var cx: int = poi["cell_x"]
-	var cz: int = poi["cell_z"]
-	var y := heights[cz * cells_x + cx]
-	marker.position = Vector3(
-		origin.x + (cx + 0.5) * cell,
-		y + POI_MARKER_SIZE.y * 0.5,
-		origin.z + (cz + 0.5) * cell
-	)
-	add_child(marker)

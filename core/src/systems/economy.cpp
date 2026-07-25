@@ -1,6 +1,7 @@
 #include "systems/economy.hpp"
 
 #include "ecs/components.hpp"
+#include "ecs/components_building.hpp"
 
 #include <algorithm>
 
@@ -14,6 +15,32 @@ int32_t clamp_to_cap(int32_t value, int32_t cap) {
 }
 
 } // namespace
+
+ecs::Resources effective_caps(const entt::registry &registry, entt::entity match,
+        entt::entity player) {
+    ecs::Resources caps;
+    const auto *dice_catalog = registry.try_get<const ecs::DiceCatalog>(match);
+    if (dice_catalog != nullptr) {
+        caps = dice_catalog->caps;
+    }
+    // Склады игрока (активные) поднимают капы еды/дерева/камня (SPEC §5).
+    const auto *buildings = registry.try_get<const ecs::BuildingCatalog>(match);
+    if (buildings == nullptr || caps.food <= 0) {
+        return caps; // без базовых капов складам нечего поднимать
+    }
+    const int32_t player_id = registry.get<const ecs::PlayerInfo>(player).id;
+    for (auto [entity, building] : registry.view<const ecs::Building>().each()) {
+        if (building.player_id != player_id ||
+                building.status != static_cast<int32_t>(BuildingStatus::Active)) {
+            continue;
+        }
+        const ecs::BuildingDef &def = buildings->defs[building.def_index];
+        caps.food += def.cap_food;
+        caps.wood += def.cap_wood;
+        caps.stone += def.cap_stone;
+    }
+    return caps;
+}
 
 void apply_dice_income(entt::registry &registry) {
     const entt::entity match = registry.view<const ecs::MatchState>().front();
@@ -36,16 +63,21 @@ void apply_dice_income(entt::registry &registry) {
             resources.hammers += face.gain.hammers;
             resources.swords += face.gain.swords;
             resources.culture += face.gain.culture;
-            // Кресты не начисляются ресурсами: они уходят в шкалу опасности
-            // (фаза Катастроф, systems/danger). Пул очищается там же.
+            // Мельница: +еда за выпавшую грань еды у смежной фермы (SPEC §5).
+            if (face.gain.food > 0) {
+                resources.food += die.food_bonus;
+            }
+            // Кресты не начисляются ресурсами: уходят в шкалу опасности
+            // (фаза Катастроф). Пул очищается там же.
         }
-        resources.wood = clamp_to_cap(resources.wood, catalog->caps.wood);
-        resources.stone = clamp_to_cap(resources.stone, catalog->caps.stone);
-        resources.food = clamp_to_cap(resources.food, catalog->caps.food);
-        resources.gold = clamp_to_cap(resources.gold, catalog->caps.gold);
-        resources.hammers = clamp_to_cap(resources.hammers, catalog->caps.hammers);
-        resources.swords = clamp_to_cap(resources.swords, catalog->caps.swords);
-        resources.culture = clamp_to_cap(resources.culture, catalog->caps.culture);
+        const ecs::Resources caps = effective_caps(registry, match, entity);
+        resources.wood = clamp_to_cap(resources.wood, caps.wood);
+        resources.stone = clamp_to_cap(resources.stone, caps.stone);
+        resources.food = clamp_to_cap(resources.food, caps.food);
+        resources.gold = clamp_to_cap(resources.gold, caps.gold);
+        resources.hammers = clamp_to_cap(resources.hammers, caps.hammers);
+        resources.swords = clamp_to_cap(resources.swords, caps.swords);
+        resources.culture = clamp_to_cap(resources.culture, caps.culture);
     }
 }
 

@@ -8,6 +8,7 @@
 #include "systems/danger.hpp"
 #include "systems/dice.hpp"
 #include "systems/economy.hpp"
+#include "systems/expansion.hpp"
 #include "systems/placement.hpp"
 #include "systems/upkeep.hpp"
 #include "turn/turn_machine.hpp"
@@ -83,6 +84,9 @@ struct Match::Impl {
             grid.types = grid_data.types;
             grid.heights = grid_data.heights;
             grid.occupancy.assign(grid.types.size(), ecs::kCellFree);
+            for (const gen::PoiSpot &poi : grid_data.poi) {
+                grid.pois.push_back({poi.cell_x, poi.cell_z, poi.kind, poi.amount});
+            }
 
             registry.get<ecs::Resources>(entity) = catalog.starting_resources;
             if (!systems::preplace_castle(registry, entity, catalog, error)) {
@@ -185,7 +189,10 @@ std::vector<Event> Match::tick(double dt) {
     const turn::PhaseHook hook = [&events](entt::registry &registry, Phase phase) {
         switch (phase) {
             case Phase::TurnStart:
+                // Активация построек, затем расширение платформами (SPEC §11.4):
+                // платформа активируется и в тот же вход достраивает леса.
                 systems::activate_constructions(registry);
+                systems::expand_platforms(registry, events);
                 break;
             case Phase::Food:
                 systems::apply_food_upkeep(registry);

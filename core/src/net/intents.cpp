@@ -2,6 +2,7 @@
 
 #include "systems/dice.hpp"
 #include "systems/placement.hpp"
+#include "systems/poi.hpp"
 #include "turn/turn_machine.hpp"
 
 namespace dicecore::net {
@@ -28,6 +29,9 @@ IntentResult dispatch_intent(entt::registry &registry, int32_t player_id, const 
     }
     if (intent.type == kIntentReroll) {
         return systems::handle_reroll(registry, player_id, intent);
+    }
+    if (intent.type == kIntentHarvest) {
+        return systems::handle_harvest(registry, player_id, intent);
     }
     // Стейтлес-намерения (echo) не требуют реестра.
     return process_intent(intent);

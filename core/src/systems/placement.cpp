@@ -41,6 +41,12 @@ int32_t parse_cell(const Intent &intent, const char *key) {
     return static_cast<int32_t>(std::strtol(it->second.c_str(), nullptr, 10));
 }
 
+// Клетка пригодна под застройку: обычная поверхность или клетка-леса (SPEC §11.4).
+bool is_buildable_cell(int32_t type) {
+    return type == static_cast<int32_t>(gen::CellType::Buildable) ||
+            type == static_cast<int32_t>(gen::CellType::Scaffold);
+}
+
 // Прямоугольник full free+buildable? Возвращает код отказа либо nullptr.
 const char *check_footprint(const ecs::PlayerGrid &grid, int32_t cx, int32_t cz,
         int32_t size_x, int32_t size_z) {
@@ -51,7 +57,7 @@ const char *check_footprint(const ecs::PlayerGrid &grid, int32_t cx, int32_t cz,
     for (int32_t dz = 0; dz < size_z; ++dz) {
         for (int32_t dx = 0; dx < size_x; ++dx) {
             const size_t index = grid.index_of(cx + dx, cz + dz);
-            if (grid.types[index] != static_cast<int32_t>(gen::CellType::Buildable)) {
+            if (!is_buildable_cell(grid.types[index])) {
                 return kRejectCellNotBuildable;
             }
             if (grid.occupancy[index] != ecs::kCellFree) {
@@ -60,6 +66,30 @@ const char *check_footprint(const ecs::PlayerGrid &grid, int32_t cx, int32_t cz,
         }
     }
     return nullptr;
+}
+
+// Край острова: хотя бы одна клетка габарита граничит с не-поверхностью
+// (Void/Blocked за границей острова) или с краем сетки (SPEC §5, порт).
+bool touches_edge(const ecs::PlayerGrid &grid, int32_t cx, int32_t cz, int32_t size_x,
+        int32_t size_z) {
+    constexpr int32_t kNeighbors[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    for (int32_t dz = 0; dz < size_z; ++dz) {
+        for (int32_t dx = 0; dx < size_x; ++dx) {
+            const int32_t x = cx + dx;
+            const int32_t z = cz + dz;
+            for (const auto &n : kNeighbors) {
+                const int32_t nx = x + n[0];
+                const int32_t nz = z + n[1];
+                if (!grid.in_bounds(nx, nz)) {
+                    return true; // за границей сетки — открытый воздух
+                }
+                if (grid.types[grid.index_of(nx, nz)] == static_cast<int32_t>(gen::CellType::Void)) {
+                    return true; // соседняя клетка — воздух вокруг острова
+                }
+            }
+        }
+    }
+    return false;
 }
 
 void fill_occupancy(ecs::PlayerGrid &grid, const ecs::Building &building, uint32_t value) {
@@ -126,6 +156,24 @@ bool parse_buildings_json(const std::string &json_text, ecs::BuildingCatalog &ca
             def.cost_stone = cost.int_at("stone", 0);
             def.cost_gold = cost.int_at("gold", 0);
         }
+        if (def_json.has("cap_bonus")) {
+            const save::JsonValue &cap = def_json.as_object().at("cap_bonus");
+            def.cap_food = cap.int_at("food", 0);
+            def.cap_wood = cap.int_at("wood", 0);
+            def.cap_stone = cap.int_at("stone", 0);
+        }
+        def.mill_food_bonus = def_json.int_at("mill_food_bonus", 0);
+        if (def_json.has("expansion")) {
+            const save::JsonValue &exp = def_json.as_object().at("expansion");
+            def.expansion_radius = exp.int_at("radius", 0);
+            def.expansion_max_cells = exp.int_at("max_cells", 0);
+        }
+        def.requires_edge = def_json.as_object().count("requires_edge") &&
+                def_json.as_object().at("requires_edge").as_bool();
+        def.unlocks_research = def_json.as_object().count("unlocks_research") &&
+                def_json.as_object().at("unlocks_research").as_bool();
+        def.unlocks_raids = def_json.as_object().count("unlocks_raids") &&
+                def_json.as_object().at("unlocks_raids").as_bool();
         if (def.size_x <= 0 || def.size_z <= 0 || def.hp <= 0) {
             error = "недопустимые габариты/HP здания " + id;
             return false;
@@ -229,6 +277,10 @@ IntentResult handle_build(entt::registry &registry, int32_t player_id, const Int
     const auto &grid = registry.get<const ecs::PlayerGrid>(player_entity);
     if (const char *reject = check_footprint(grid, cell_x, cell_z, def.size_x, def.size_z)) {
         result.reason = reject;
+        return result;
+    }
+    if (def.requires_edge && !touches_edge(grid, cell_x, cell_z, def.size_x, def.size_z)) {
+        result.reason = kRejectNotEdge;
         return result;
     }
 

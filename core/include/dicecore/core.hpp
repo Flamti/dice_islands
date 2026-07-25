@@ -17,6 +17,7 @@ inline constexpr const char *kIntentPhaseReady = "phase_ready";
 inline constexpr const char *kIntentBuild = "build";
 inline constexpr const char *kIntentDemolish = "demolish";
 inline constexpr const char *kIntentReroll = "reroll";
+inline constexpr const char *kIntentHarvest = "harvest"; // добыча POI молотком
 
 // Ключи полезной нагрузки намерений.
 inline constexpr const char *kPayloadReady = "ready";
@@ -44,6 +45,8 @@ inline constexpr const char *kRejectCastleProtected = "cannot_demolish_castle";
 inline constexpr const char *kRejectNoRerollsLeft = "no_rerolls_left";
 inline constexpr const char *kRejectBadDiceSelection = "bad_dice_selection";
 inline constexpr const char *kRejectCrossLocked = "cross_locked";
+inline constexpr const char *kRejectNotEdge = "not_on_edge";
+inline constexpr const char *kRejectNoPoiHere = "no_poi_here";
 
 // Коды ошибок старта партии.
 inline constexpr const char *kErrorMatchAlreadyActive = "match_already_active";
@@ -71,6 +74,7 @@ enum class BuildingStatus : int32_t {
 inline constexpr const char *kEventTurnStarted = "turn_started";
 inline constexpr const char *kEventPhaseEntered = "phase_entered";
 inline constexpr const char *kEventDisaster = "disaster"; // катастрофа сработала
+inline constexpr const char *kEventExpansion = "expansion"; // платформа достроила леса
 
 // Фазы хода по SPEC §4 (утверждено 25.07.2026).
 enum class Phase : int32_t {
@@ -162,6 +166,21 @@ struct DieSnapshot {
     int32_t hammers = 0;
     int32_t swords = 0;
     int32_t culture = 0;
+    int32_t food_bonus = 0; // мельница: +еда при food-грани (SPEC §5)
+};
+
+// Клетка сетки (леса, добавленные платформой).
+struct CellRef {
+    int32_t x = 0;
+    int32_t z = 0;
+};
+
+// POI на острове игрока (SPEC §11.2).
+struct PoiRef {
+    int32_t x = 0;
+    int32_t z = 0;
+    std::string kind; // "stone" | "wood"
+    int32_t amount = 0;
 };
 
 // Снимок игрока для UI: идентичность, ресурсы, пул кубиков текущего хода.
@@ -178,9 +197,14 @@ struct PlayerSnapshot {
     int32_t hammers = 0;
     int32_t swords = 0;
     int32_t culture = 0;
+    int32_t cap_food = 0; // эффективные капы с учётом складов; 0 — без капа
+    int32_t cap_wood = 0;
+    int32_t cap_stone = 0;
     int32_t danger = 0; // текущее заполнение шкалы опасности (SPEC §7.1)
     int32_t rerolls_left = 0;
     std::vector<DieSnapshot> dice; // пул от Дохода до Катастроф, иначе пуст
+    std::vector<CellRef> scaffolds; // клетки-леса от платформ (SPEC §11.4)
+    std::vector<PoiRef> pois; // оставшиеся POI на острове
 };
 
 // Снимок здания для UI.

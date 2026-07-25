@@ -64,6 +64,7 @@ struct Resources {
 struct DieState {
     int32_t type_index = 0; // индекс в DiceCatalog.defs
     int32_t face = -1; // выпавшая грань 0..5; -1 — не брошен
+    int32_t food_bonus = 0; // мельница: +еда при выпадении food-грани (SPEC §5)
 };
 
 // Пул кубиков игрока: живёт от фазы Дохода до фазы Ресурсов (SPEC §4).

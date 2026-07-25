@@ -164,14 +164,38 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
         resources["swords"] = player.swords;
         resources["culture"] = player.culture;
         entry[kKeyResources] = resources;
+        godot::Dictionary caps;
+        caps["food"] = player.cap_food;
+        caps["wood"] = player.cap_wood;
+        caps["stone"] = player.cap_stone;
+        entry["caps"] = caps;
         entry[kKeyDanger] = player.danger;
         entry[kKeyRerollsLeft] = player.rerolls_left;
+        godot::Array scaffolds;
+        for (const CellRef &cell : player.scaffolds) {
+            godot::Dictionary c;
+            c["cell_x"] = cell.x;
+            c["cell_z"] = cell.z;
+            scaffolds.push_back(c);
+        }
+        entry["scaffolds"] = scaffolds;
+        godot::Array pois;
+        for (const PoiRef &poi : player.pois) {
+            godot::Dictionary p;
+            p["cell_x"] = poi.x;
+            p["cell_z"] = poi.z;
+            p["kind"] = godot::String(poi.kind.c_str());
+            p["amount"] = poi.amount;
+            pois.push_back(p);
+        }
+        entry["pois"] = pois;
         godot::Array dice;
         for (const DieSnapshot &die : player.dice) {
             godot::Dictionary die_entry;
             die_entry[kKeyType] = godot::String(die.type.c_str());
             die_entry[kKeyFace] = die.face;
             die_entry[kKeyCrosses] = die.crosses;
+            die_entry["food_bonus"] = die.food_bonus;
             godot::Dictionary gain;
             gain["wood"] = die.wood;
             gain["stone"] = die.stone;

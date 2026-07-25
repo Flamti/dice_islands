@@ -30,12 +30,69 @@
       "hp": 14,
       "dice": "stone"
     },
+    "market": {
+      "name": "Рынок",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 3, "gold": 2 },
+      "hp": 12,
+      "dice": "gold"
+    },
+    "workshop": {
+      "name": "Мастерская",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 3, "stone": 2 },
+      "hp": 14,
+      "dice": "hammers"
+    },
     "barracks": {
       "name": "Казарма",
       "size_x": 2, "size_z": 2,
       "cost": { "wood": 2, "stone": 4 },
       "hp": 20,
       "dice": "swords"
+    },
+    "school": {
+      "name": "Школа",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 3, "stone": 2, "gold": 1 },
+      "hp": 12,
+      "dice": "culture"
+    },
+    "university": {
+      "name": "Университет",
+      "size_x": 3, "size_z": 2,
+      "cost": { "wood": 6, "stone": 6, "gold": 4 },
+      "hp": 18,
+      "unlocks_research": true
+    },
+    "warehouse": {
+      "name": "Склад",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 4, "stone": 2 },
+      "hp": 16,
+      "cap_bonus": { "food": 15, "wood": 15, "stone": 15 }
+    },
+    "mill": {
+      "name": "Ветряная мельница",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 4, "gold": 1 },
+      "hp": 12,
+      "mill_food_bonus": 1
+    },
+    "port": {
+      "name": "Порт",
+      "size_x": 2, "size_z": 3,
+      "cost": { "wood": 5, "stone": 3, "gold": 2 },
+      "hp": 20,
+      "requires_edge": true,
+      "unlocks_raids": true
+    },
+    "platform": {
+      "name": "Строительная платформа",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 2, "stone": 2, "gold": 2 },
+      "hp": 10,
+      "expansion": { "radius": 3, "max_cells": 16 }
     }
   }
 }

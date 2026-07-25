@@ -1,18 +1,23 @@
 extends PanelContainer
-## Режим стройки (этап 4): выбор здания из data/buildings.json, клик по своему
-## острову -> BuildIntent; режим сноса -> DemolishIntent. Валидация — на хосте,
-## панель только собирает намерения и показывает вердикты.
+## Режим стройки (этапы 4, 8): выбор здания из data/buildings.json, клик по
+## своему острову -> BuildIntent; режимы сноса и добычи POI. Валидация — на
+## хосте, панель только собирает намерения и показывает вердикты.
 
 const BUILDINGS_CONFIG_PATH := "../data/buildings.json"
 const RAY_LENGTH := 500.0
 const PHASE_DEVELOPMENT := 6
-## Здания, доступные из панели на этапе 4 (порядок кнопок).
-const BUILDABLE_IDS: Array[String] = ["farm", "sawmill", "quarry", "barracks"]
+## Здания, доступные из панели (порядок кнопок). Замок предразмещён и не строится.
+const BUILDABLE_IDS: Array[String] = [
+	"farm", "sawmill", "quarry", "market", "workshop", "barracks", "school",
+	"university", "warehouse", "mill", "port", "platform",
+]
 
 var _selected_building := "" ## пусто — ничего не выбрано
 var _demolish_mode := false
+var _harvest_mode := false
 var _buttons := {} ## id здания -> Button
 var _demolish_button: Button
+var _harvest_button: Button
 var _status_label: Label
 
 
@@ -49,6 +54,12 @@ func _build_ui() -> void:
 	_demolish_button.pressed.connect(_on_demolish_pressed)
 	box.add_child(_demolish_button)
 
+	_harvest_button = Button.new()
+	_harvest_button.text = "Добыть POI (молоток)"
+	_harvest_button.toggle_mode = true
+	_harvest_button.pressed.connect(_on_harvest_pressed)
+	box.add_child(_harvest_button)
+
 	_status_label = Label.new()
 	_status_label.text = "Выберите здание и кликните по своему острову"
 	box.add_child(_status_label)
@@ -83,7 +94,9 @@ func _cost_text(cost: Dictionary) -> String:
 
 func _on_building_pressed(id: String) -> void:
 	_demolish_mode = false
+	_harvest_mode = false
 	_demolish_button.set_pressed_no_signal(false)
+	_harvest_button.set_pressed_no_signal(false)
 	_selected_building = "" if _selected_building == id else id
 	for button_id in _buttons:
 		_buttons[button_id].set_pressed_no_signal(button_id == _selected_building)
@@ -92,18 +105,32 @@ func _on_building_pressed(id: String) -> void:
 
 
 func _on_demolish_pressed() -> void:
+	_clear_building_selection()
+	_harvest_mode = false
+	_harvest_button.set_pressed_no_signal(false)
+	_demolish_mode = _demolish_button.button_pressed
+	_status_label.text = "Клик по зданию — снос" if _demolish_mode else "Выбор снят"
+
+
+func _on_harvest_pressed() -> void:
+	_clear_building_selection()
+	_demolish_mode = false
+	_demolish_button.set_pressed_no_signal(false)
+	_harvest_mode = _harvest_button.button_pressed
+	_status_label.text = "Клик по POI — добыча" if _harvest_mode else "Выбор снят"
+
+
+func _clear_building_selection() -> void:
 	_selected_building = ""
 	for button_id in _buttons:
 		_buttons[button_id].set_pressed_no_signal(false)
-	_demolish_mode = _demolish_button.button_pressed
-	_status_label.text = "Клик по зданию — снос" if _demolish_mode else "Выбор снят"
 
 
 # --- Клик по острову ---------------------------------------------------------
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible or (_selected_building == "" and not _demolish_mode):
+	if not visible or (_selected_building == "" and not _demolish_mode and not _harvest_mode):
 		return
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT):
@@ -111,7 +138,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	var cell := _pick_cell(event.position)
 	if cell.x < 0:
 		return
-	if _demolish_mode:
+	if _harvest_mode:
+		NetSession.submit_intent({"type": "harvest", "payload": {
+			"cell_x": str(cell.x), "cell_z": str(cell.y)}})
+	elif _demolish_mode:
 		NetSession.submit_intent({"type": "demolish", "payload": {
 			"cell_x": str(cell.x), "cell_z": str(cell.y)}})
 	else:
@@ -160,7 +190,7 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 
 
 func _on_intent_confirmed(result: Dictionary) -> void:
-	if result["type"] != "build" and result["type"] != "demolish":
+	if result["type"] not in ["build", "demolish", "harvest"]:
 		return
 	if result["accepted"]:
 		_status_label.text = "Принято: %s" % result["type"]

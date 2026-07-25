@@ -3,6 +3,7 @@
 #include "ecs/components_building.hpp"
 #include "math/rng.hpp"
 #include "save/json.hpp"
+#include "systems/adjacency.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -127,35 +128,56 @@ void collect_income(entt::registry &registry) {
     }
 
     // Кубики зданий в порядке ID сущностей — стабильные индексы пула.
-    std::vector<std::pair<uint32_t, std::pair<int32_t, int32_t>>> collected; // (bid, (player, die))
+    struct Collected {
+        uint32_t building_id;
+        int32_t player_id;
+        int32_t die_index;
+        int32_t food_bonus;
+    };
+    std::vector<Collected> collected;
     for (auto [entity, building] : registry.view<const ecs::Building>().each()) {
         if (building.status != static_cast<int32_t>(BuildingStatus::Active)) {
             continue;
         }
-        const std::string &die_id = buildings_catalog->defs[building.def_index].dice;
-        if (die_id.empty()) {
+        const ecs::BuildingDef &def = buildings_catalog->defs[building.def_index];
+        if (def.dice.empty()) {
             continue;
         }
-        const int32_t die_index = find_die_def(*catalog, die_id);
+        const int32_t die_index = find_die_def(*catalog, def.dice);
         if (die_index < 0) {
             continue;
         }
-        collected.push_back({static_cast<uint32_t>(entity), {building.player_id, die_index}});
+        // Мельница (SPEC §5): смежные фермы (food-кубик) получают +еда за
+        // выпавшую food-грань. Бонус суммируется по смежным активным мельницам.
+        int32_t food_bonus = 0;
+        if (def.dice == "food") {
+            for (const entt::entity neighbor : adjacent_buildings(registry, entity)) {
+                const auto &nb = registry.get<const ecs::Building>(neighbor);
+                if (nb.status != static_cast<int32_t>(BuildingStatus::Active)) {
+                    continue;
+                }
+                food_bonus += buildings_catalog->defs[nb.def_index].mill_food_bonus;
+            }
+        }
+        collected.push_back(
+                {static_cast<uint32_t>(entity), building.player_id, die_index, food_bonus});
     }
-    std::sort(collected.begin(), collected.end());
+    std::sort(collected.begin(), collected.end(),
+            [](const Collected &a, const Collected &b) { return a.building_id < b.building_id; });
 
     for (auto [entity, dice] : registry.view<ecs::PlayerDice>().each()) {
         dice.dice.clear();
         dice.rerolls_left = kMaxRerolls;
     }
-    for (const auto &[building_id, entry] : collected) {
-        const entt::entity player = find_player(registry, entry.first);
+    for (const Collected &entry : collected) {
+        const entt::entity player = find_player(registry, entry.player_id);
         if (player == entt::null) {
             continue;
         }
         auto &dice = registry.get_or_emplace<ecs::PlayerDice>(player);
         ecs::DieState die;
-        die.type_index = entry.second;
+        die.type_index = entry.die_index;
+        die.food_bonus = entry.food_bonus;
         dice.dice.push_back(die);
         dice.rerolls_left = kMaxRerolls;
     }

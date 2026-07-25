@@ -3,6 +3,8 @@
 #include "ecs/components.hpp"
 #include "ecs/components_building.hpp"
 #include "ecs/components_disaster.hpp"
+#include "gen/island_gen.hpp"
+#include "systems/economy.hpp"
 
 #include <algorithm>
 #include <string>
@@ -226,6 +228,23 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
         player.culture = res.culture;
         const auto *meter = registry.try_get<const ecs::DangerMeter>(entity);
         player.danger = meter != nullptr ? meter->value : 0;
+        // Эффективные капы с учётом складов и динамика сетки (леса, POI).
+        const auto *grid = registry.try_get<const ecs::PlayerGrid>(entity);
+        if (grid != nullptr) {
+            const ecs::Resources caps = systems::effective_caps(registry, match, entity);
+            player.cap_food = caps.food;
+            player.cap_wood = caps.wood;
+            player.cap_stone = caps.stone;
+            for (size_t i = 0; i < grid->types.size(); ++i) {
+                if (grid->types[i] == static_cast<int32_t>(gen::CellType::Scaffold)) {
+                    player.scaffolds.push_back({static_cast<int32_t>(i % grid->cells_x),
+                            static_cast<int32_t>(i / grid->cells_x)});
+                }
+            }
+            for (const ecs::PlayerPoi &poi : grid->pois) {
+                player.pois.push_back({poi.cell_x, poi.cell_z, poi.kind, poi.amount});
+            }
+        }
         const auto *dice = registry.try_get<const ecs::PlayerDice>(entity);
         if (dice != nullptr && dice_catalog != nullptr) {
             player.rerolls_left = dice->rerolls_left;
@@ -234,6 +253,7 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
                 DieSnapshot entry;
                 entry.type = def.id;
                 entry.face = die.face;
+                entry.food_bonus = die.food_bonus;
                 if (die.face >= 0) {
                     const ecs::DieFace &face = def.faces[die.face];
                     entry.crosses = face.crosses;
