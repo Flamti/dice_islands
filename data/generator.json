@@ -1,0 +1,21 @@
+{
+  "cell_size": 2.0,
+  "grid_cells": 24,
+  "voxels_per_cell": 2,
+  "island_radius": 16.2,
+  "top_height": 5.0,
+  "top_amplitude": 1.5,
+  "top_noise_scale": 0.06,
+  "bottom_depth": 16.0,
+  "bottom_amplitude": 4.0,
+  "bottom_noise_scale": 0.09,
+  "edge_noise_amplitude": 3.0,
+  "edge_noise_scale": 0.12,
+  "carve_amplitude": 2.0,
+  "carve_noise_scale": 0.16,
+  "flat_threshold": 0.8,
+  "poi_count": 10,
+  "poi_min_amount": 2,
+  "poi_max_amount": 4,
+  "uv_tile_world_size": 4.0
+}

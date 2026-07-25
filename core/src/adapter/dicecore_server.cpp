@@ -1,6 +1,12 @@
 #include "dicecore_server.hpp"
 
+#include "gen/glb_export.hpp"
+#include "gen/island_gen.hpp"
+
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 
 namespace dicecore {
 
@@ -141,6 +147,57 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
     return out;
 }
 
+godot::Dictionary DiceCoreServer::generate_island(int64_t seed, const godot::String &config_json) const {
+    godot::Dictionary out;
+    gen::GeneratorParams params;
+    if (!config_json.is_empty()) {
+        std::string error;
+        if (!gen::params_from_json(to_std_string(config_json), params, error)) {
+            out[kKeyOk] = false;
+            out[kKeyReason] = godot::String(error.c_str());
+            return out;
+        }
+    }
+
+    const gen::IslandData island = gen::generate_island(static_cast<uint64_t>(seed), params);
+    const std::vector<uint8_t> glb = gen::export_glb(island);
+
+    godot::PackedByteArray glb_bytes;
+    glb_bytes.resize(static_cast<int64_t>(glb.size()));
+    memcpy(glb_bytes.ptrw(), glb.data(), glb.size());
+
+    godot::Dictionary grid;
+    grid["cells_x"] = island.grid.cells_x;
+    grid["cells_z"] = island.grid.cells_z;
+    grid["cell_size"] = island.grid.cell_size;
+    grid["origin_x"] = island.grid.origin_x;
+    grid["origin_z"] = island.grid.origin_z;
+    godot::PackedInt32Array types;
+    types.resize(static_cast<int64_t>(island.grid.types.size()));
+    memcpy(types.ptrw(), island.grid.types.data(), island.grid.types.size() * sizeof(int32_t));
+    grid["types"] = types;
+    godot::PackedFloat32Array heights;
+    heights.resize(static_cast<int64_t>(island.grid.heights.size()));
+    memcpy(heights.ptrw(), island.grid.heights.data(), island.grid.heights.size() * sizeof(float));
+    grid["heights"] = heights;
+    godot::Array poi;
+    for (const gen::PoiSpot &spot : island.grid.poi) {
+        godot::Dictionary entry;
+        entry["cell_x"] = spot.cell_x;
+        entry["cell_z"] = spot.cell_z;
+        entry["kind"] = godot::String(spot.kind.c_str());
+        entry["amount"] = spot.amount;
+        poi.push_back(entry);
+    }
+    grid["poi"] = poi;
+
+    out[kKeyOk] = true;
+    out[kKeyReason] = godot::String();
+    out["glb"] = glb_bytes;
+    out["grid"] = grid;
+    return out;
+}
+
 void DiceCoreServer::_bind_methods() {
     godot::ClassDB::bind_method(godot::D_METHOD("get_core_version"), &DiceCoreServer::get_core_version);
     godot::ClassDB::bind_method(godot::D_METHOD("start_match", "config"), &DiceCoreServer::start_match);
@@ -148,6 +205,8 @@ void DiceCoreServer::_bind_methods() {
             godot::D_METHOD("submit_intent", "player_id", "intent"), &DiceCoreServer::submit_intent);
     godot::ClassDB::bind_method(godot::D_METHOD("tick", "dt"), &DiceCoreServer::tick);
     godot::ClassDB::bind_method(godot::D_METHOD("get_turn_state"), &DiceCoreServer::get_turn_state);
+    godot::ClassDB::bind_method(
+            godot::D_METHOD("generate_island", "seed", "config_json"), &DiceCoreServer::generate_island);
 }
 
 } // namespace dicecore

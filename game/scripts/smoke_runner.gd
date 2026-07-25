@@ -152,8 +152,12 @@ func _mhost_on_lobby_state(state: Dictionary) -> void:
 		if not _match_started:
 			_fail("host_start_match отклонён")
 		return
-	# Успех хоста: партия дошла до хода 2 и гость штатно вышел.
+	# Успех хоста: партия дошла до хода 2, острова с сетками на месте,
+	# гость штатно вышел.
 	if _turn_reached and _match_started and _count_humans(state) == 1:
+		if not _islands_ok(MATCH_SLOT_COUNT):
+			_fail("у хоста нет островов с сетками для всех участников")
+			return
 		_pass_and_quit("SMOKE_MHOST_OK")
 
 
@@ -189,6 +193,10 @@ func _mguest_on_turn_state(turn_state: Dictionary) -> void:
 		_fail("фаза Бросков завершилась без готовности гостя (барьер не сработал)")
 		return
 	if turn >= TARGET_TURN:
+		# Этап 3: у каждого участника свой остров с наложенной сеткой.
+		if not _islands_ok(MATCH_SLOT_COUNT):
+			_fail("у гостя нет островов с сетками для всех участников")
+			return
 		NetSession.leave()
 		_pass_and_quit("SMOKE_MGUEST_OK")
 
@@ -210,6 +218,19 @@ func _is_player_ready(turn_state: Dictionary, player_id: int) -> bool:
 		if player["id"] == player_id:
 			return player["ready"]
 	return false
+
+
+## Острова и сетки всех участников сгенерированы (этап 3).
+func _islands_ok(expected: int) -> bool:
+	if get_tree().get_nodes_in_group("islands").size() != expected:
+		return false
+	var grids := get_tree().get_nodes_in_group("island_grids")
+	if grids.size() != expected:
+		return false
+	for grid in grids:
+		if grid.buildable_count <= 0 or grid.poi_count <= 0:
+			return false
+	return true
 
 
 func _count_humans(state: Dictionary) -> int:

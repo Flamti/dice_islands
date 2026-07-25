@@ -5,6 +5,7 @@ extends Control
 const SmokeRunner := preload("res://scripts/smoke_runner.gd")
 const HudPhase := preload("res://scripts/hud_phase.gd")
 const PhaseBarScene := preload("res://ui/phase_bar.tscn")
+const IslandScene := preload("res://scenes/island.tscn")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -41,6 +42,7 @@ var _log_view: TextEdit
 
 # --- Партия ---
 var _phase_bar: HudPhase
+var _island_view: Node3D
 
 
 func _ready() -> void:
@@ -267,6 +269,9 @@ func _on_leave_pressed() -> void:
 
 func _on_match_started() -> void:
 	_lobby_panel.visible = false
+	# Node3D под Control рендерится в общий World3D главного вьюпорта.
+	_island_view = IslandScene.instantiate()
+	add_child(_island_view)
 	_phase_bar = PhaseBarScene.instantiate()
 	_phase_bar.leave_requested.connect(_on_match_leave_requested)
 	add_child(_phase_bar)
@@ -274,14 +279,17 @@ func _on_match_started() -> void:
 
 func _on_match_leave_requested() -> void:
 	NetSession.leave()
-	_close_phase_bar()
+	_close_match_view()
 	_show_menu()
 
 
-func _close_phase_bar() -> void:
+func _close_match_view() -> void:
 	if _phase_bar != null:
 		_phase_bar.queue_free()
 		_phase_bar = null
+	if _island_view != null:
+		_island_view.queue_free()
+		_island_view = null
 
 
 # --- Реакция на события сети -------------------------------------------------
@@ -359,7 +367,7 @@ func _on_intent_confirmed(result: Dictionary) -> void:
 
 func _on_connection_lost() -> void:
 	_status_label.text = "Соединение потеряно"
-	_close_phase_bar()
+	_close_match_view()
 	_show_menu()
 
 

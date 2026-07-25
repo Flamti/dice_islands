@@ -19,6 +19,9 @@ sources = (
     + Glob("src/ecs/*.cpp")
     + Glob("src/turn/*.cpp")
     + Glob("src/net/*.cpp")
+    + Glob("src/math/*.cpp")
+    + Glob("src/gen/*.cpp")
+    + Glob("src/save/*.cpp")
 )
 
 # Библиотека кладётся сразу в аддон Godot-проекта; суффикс (платформа/цель/арх)

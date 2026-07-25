@@ -21,6 +21,9 @@ const SERVER_PEER_ID := 1 ## фиксированный peer id хоста в Hi
 const REJECT_WRONG_PASSWORD := "wrong_password"
 const REJECT_LOBBY_FULL := "lobby_full"
 
+## Разброс производных сидов островов (простое число Кнута для смешивания).
+const ISLAND_SEED_STRIDE := 2654435761
+
 ## Дефолты таймеров фаз-решений, сек (SPEC §2.3 [баланс]); 0 — без лимита.
 const DEFAULT_ROLLS_TIMER_SEC := 60.0
 const DEFAULT_DEVELOPMENT_TIMER_SEC := 90.0
@@ -47,6 +50,9 @@ var state := {}
 var match_active := false
 ## Последний снапшот хода от ядра (структуру см. DiceCoreServer.get_turn_state).
 var turn_state := {}
+## Сиды островов участников: player_id -> int. Раздаёт хост при старте партии
+## (SPEC §11.1); генерация по сиду детерминирована и выполняется локально.
+var island_seeds := {}
 var _timer_sync_accum := 0.0
 
 
@@ -99,6 +105,7 @@ func leave() -> void:
 	state = {}
 	match_active = false
 	turn_state = {}
+	island_seeds = {}
 	_timer_sync_accum = 0.0
 
 
@@ -149,12 +156,22 @@ func host_start_match(timers: Dictionary) -> bool:
 		_broadcast_log("Старт партии отклонён ядром: %s" % result["reason"])
 		return false
 	match_active = true
+	# Сиды островов: производные от общего сида партии, по одному на игрока.
+	var match_seed := randi()
+	island_seeds = {}
+	for player in players:
+		island_seeds[player["id"]] = absi(match_seed + player["id"] * ISLAND_SEED_STRIDE)
 	_broadcast_log("Партия началась: игроков %d" % players.size())
 	match_started.emit()
 	if multiplayer.multiplayer_peer != null:
-		_rpc_match_started.rpc()
+		_rpc_match_started.rpc(island_seeds)
 	_broadcast_turn_state()
 	return true
+
+
+## ID игрока этого клиента (индекс слота) либо -1 до входа в слот.
+func my_player_id() -> int:
+	return _find_slot_by_peer(multiplayer.get_unique_id())
 
 
 ## Хост тикает ядро каждый кадр; гости получают снапшоты по сети.
@@ -276,8 +293,9 @@ func _rpc_log_line(text: String) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _rpc_match_started() -> void:
+func _rpc_match_started(seeds: Dictionary) -> void:
 	match_active = true
+	island_seeds = seeds
 	match_started.emit()
 
 
@@ -320,9 +338,11 @@ func _host_set_ready(peer_id: int, ready: bool) -> void:
 
 
 func _broadcast_state() -> void:
-	lobby_state_changed.emit(state)
+	# Сначала RPC, потом локальный сигнал: обработчик сигнала может тут же
+	# слать новые RPC (старт партии), и они не должны обгонять стейт лобби.
 	if multiplayer.multiplayer_peer != null:
 		_rpc_receive_state.rpc(state)
+	lobby_state_changed.emit(state)
 
 
 func _broadcast_log(text: String) -> void:
@@ -404,6 +424,8 @@ func _find_free_slot() -> int:
 
 
 func _find_slot_by_peer(peer_id: int) -> int:
+	if state.is_empty():
+		return -1
 	for i in state["slots"].size():
 		var slot: Dictionary = state["slots"][i]
 		if slot["kind"] == SlotKind.HUMAN and slot["peer_id"] == peer_id:

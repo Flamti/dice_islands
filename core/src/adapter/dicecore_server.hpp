@@ -39,6 +39,15 @@ public:
     //   "players": [{ "id", "team", "is_ai", "alive", "ready", "resources" }] }
     godot::Dictionary get_turn_state() const;
 
+    // Генерация острова по сиду (SPEC §11.1). config_json — текст
+    // data/generator.json (пустая строка — дефолты). Детерминирована, не
+    // зависит от стейта партии — доступна и гостям для локального рендера.
+    // Возвращает: { "ok": bool, "reason": String, "glb": PackedByteArray,
+    //   "grid": { "cells_x", "cells_z", "cell_size", "origin_x", "origin_z",
+    //             "types": PackedInt32Array, "heights": PackedFloat32Array,
+    //             "poi": [{ "cell_x", "cell_z", "kind", "amount" }] } }
+    godot::Dictionary generate_island(int64_t seed, const godot::String &config_json) const;
+
 protected:
     static void _bind_methods();
 
