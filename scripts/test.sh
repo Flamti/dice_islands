@@ -17,6 +17,7 @@ CORE_SOURCES=(
     "$ROOT"/core/src/gen/*.cpp
     "$ROOT"/core/src/save/*.cpp
     "$ROOT"/core/src/systems/*.cpp
+    "$ROOT"/core/src/systems/combat/*.cpp
 )
 INCLUDES=(
     -I"$ROOT/core/include"

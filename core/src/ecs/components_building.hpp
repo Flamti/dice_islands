@@ -33,12 +33,31 @@ struct BuildingDef {
     bool requires_edge = false; // порт: только на краю острова
     bool unlocks_research = false; // университет (экран — этап 11)
     bool unlocks_raids = false; // порт (рейды — этап 10)
+    bool is_wall = false; // стена: разрушаемое препятствие в бою (SPEC §9.3)
+    bool is_tower = false; // башня: стреляет в бою
+    bool spawns_garrison = false; // казарма/замок: точка спавна защитников
 };
 
 // Компонент сущности партии: каталог зданий и стартовые ресурсы.
 struct BuildingCatalog {
     std::vector<BuildingDef> defs;
     Resources starting_resources;
+};
+
+// Запланированный рейд, ожидающий фазы Боя (SPEC §9). Пиратский рейд ставится
+// катастрофой в фазе 5; рейды игроков (этап 10) — в фазе 7.
+struct PendingRaid {
+    int32_t defender_player = 0;
+    int32_t attacker_team = -1; // kPirateTeam = -1
+    int32_t attacker_owner = -1; // игрок-отправитель; -1 — пираты
+    int32_t count = 0;
+    int32_t landing_side = 0; // 0=N,1=E,2=S,3=W
+    int32_t target_building = -1; // ID сущности здания-цели; -1 — ближайшее
+};
+
+// Компонент сущности партии: очередь рейдов текущего хода.
+struct PendingRaids {
+    std::vector<PendingRaid> raids;
 };
 
 // Компонент сущности здания.

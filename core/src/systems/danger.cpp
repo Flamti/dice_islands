@@ -1,11 +1,13 @@
 #include "systems/danger.hpp"
 
 #include "ecs/components.hpp"
+#include "ecs/components_building.hpp"
 #include "math/rng.hpp"
 #include "save/json.hpp"
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 namespace dicecore::systems {
 
@@ -84,8 +86,24 @@ void resolve_steal(const ecs::DisasterDef &def, ecs::Resources &resources, math:
     payload["amount"] = std::to_string(stolen);
 }
 
+// Случайный живой игрок другой команды; -1, если таких нет (SPEC §7.2).
+int32_t pick_opponent(const entt::registry &registry, int32_t player_id, int32_t team,
+        math::Rng &rng) {
+    std::vector<int32_t> opponents;
+    for (auto [entity, info] : registry.view<const ecs::PlayerInfo>().each()) {
+        if (info.id != player_id && info.team != team && info.alive) {
+            opponents.push_back(info.id);
+        }
+    }
+    if (opponents.empty()) {
+        return -1;
+    }
+    std::sort(opponents.begin(), opponents.end());
+    return opponents[rng.range_int(0, static_cast<int32_t>(opponents.size()) - 1)];
+}
+
 void resolve_disaster(const ecs::DisasterDef &def, int32_t player_id, entt::entity player_entity,
-        entt::registry &registry, math::Rng &rng, std::vector<Event> &events) {
+        entt::registry &registry, entt::entity match, math::Rng &rng, std::vector<Event> &events) {
     Event event;
     event.type = kEventDisaster;
     event.payload["player"] = std::to_string(player_id);
@@ -93,10 +111,26 @@ void resolve_disaster(const ecs::DisasterDef &def, int32_t player_id, entt::enti
     event.payload["tier"] = std::to_string(def.tier);
     event.payload["target"] = def.target;
 
-    // Этап 7: только Self-эффект кражи. Opponent-таргетинг — этап 12.
     if (def.effect == ecs::kEffectStealResource && def.target == ecs::kTargetSelf) {
         auto &resources = registry.get<ecs::Resources>(player_entity);
         resolve_steal(def, resources, rng, event.payload);
+    } else if (def.effect == ecs::kEffectPirateRaid) {
+        // Нашествие пиратов (SPEC §9.3): нейтральный рейд на остров жертвы —
+        // случайного игрока чужой команды, резолв в фазе Боя.
+        const int32_t team = registry.get<const ecs::PlayerInfo>(player_entity).team;
+        const int32_t victim = pick_opponent(registry, player_id, team, rng);
+        if (victim >= 0) {
+            auto &pending = registry.get_or_emplace<ecs::PendingRaids>(match);
+            ecs::PendingRaid raid;
+            raid.defender_player = victim;
+            raid.attacker_team = -1; // пираты
+            raid.attacker_owner = -1;
+            raid.count = def.pirate_count;
+            raid.landing_side = rng.range_int(0, 3);
+            raid.target_building = -1; // ближайшее к высадке
+            pending.raids.push_back(raid);
+            event.payload["victim"] = std::to_string(victim);
+        }
     }
     events.push_back(std::move(event));
 }
@@ -145,6 +179,7 @@ bool parse_disasters_json(const std::string &json_text, ecs::DisasterCatalog &ca
                 def.steal_from.push_back(res.as_string());
             }
         }
+        def.pirate_count = def_json.int_at("pirate_count", 6);
         if (def.tier <= 0) {
             error = "у катастрофы " + id + " не задана тяжесть";
             return false;
@@ -188,7 +223,7 @@ void resolve_danger_phase(entt::registry &registry, std::vector<Event> &events) 
             rng_used = true;
             const int32_t pick = rng.range_int(0, static_cast<int32_t>(candidates.size()) - 1);
             resolve_disaster(catalog->disasters[candidates[pick]], player_id, player_entity,
-                    registry, rng, events);
+                    registry, match, rng, events);
             meter->value = 0; // шкала сбрасывается (SPEC §7.1)
             break;
         }

@@ -44,6 +44,10 @@ func _format(event: Dictionary) -> String:
 			return "— Ход %s —" % payload.get("turn", "?")
 		"disaster":
 			return _format_disaster(payload)
+		"battle":
+			var defender := int(payload.get("defender", -1)) + 1
+			return "Бой на острове игрока %d: разрушено зданий %s, защитников осталось %s" % [
+				defender, payload.get("destroyed", "0"), payload.get("defenders_left", "?")]
 		_:
 			return ""
 

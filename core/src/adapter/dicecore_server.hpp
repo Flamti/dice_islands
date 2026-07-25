@@ -38,6 +38,12 @@ public:
     // Возвращает Array событий: { "type": String, "payload": Dictionary }.
     godot::Array tick(double dt);
 
+    // Забрать логи боёв, разрешённых в последних тиках, для проигрывания боя
+    // (SPEC §9.3). Каждый лог: { "defender": int, "defenders_left": int,
+    //   "destroyed": PackedInt32Array,
+    //   "frames": [ { "tick": int, "units": [ { id, team, attacker, x, z, hp } ] } ] }.
+    godot::Array poll_battles();
+
     // Снапшот хода: { "active": bool, "turn": int, "phase": int,
     //   "is_decision": bool, "timer_remaining_sec": float (< 0 — нет таймера),
     //   "players": [{ "id", "team", "is_ai", "alive", "ready", "resources" }] }

@@ -56,6 +56,7 @@ inline constexpr const char *kErrorBadGeneratorConfig = "bad_generator_config";
 inline constexpr const char *kErrorNoCastleSpot = "no_castle_spot";
 inline constexpr const char *kErrorBadDiceConfig = "bad_dice_config";
 inline constexpr const char *kErrorBadDisastersConfig = "bad_disasters_config";
+inline constexpr const char *kErrorBadCombatConfig = "bad_combat_config";
 
 // Максимум перебросов за ход (SPEC §6).
 inline constexpr int32_t kMaxRerolls = 2;
@@ -75,6 +76,7 @@ inline constexpr const char *kEventTurnStarted = "turn_started";
 inline constexpr const char *kEventPhaseEntered = "phase_entered";
 inline constexpr const char *kEventDisaster = "disaster"; // катастрофа сработала
 inline constexpr const char *kEventExpansion = "expansion"; // платформа достроила леса
+inline constexpr const char *kEventBattle = "battle"; // бой на острове разрешён
 
 // Фазы хода по SPEC §4 (утверждено 25.07.2026).
 enum class Phase : int32_t {
@@ -130,6 +132,7 @@ struct MatchConfig {
     std::string buildings_json;
     std::string dice_json;
     std::string disasters_json;
+    std::string combat_json;
 };
 
 // Плоское намерение игрока: тип + строковая полезная нагрузка.
@@ -235,6 +238,28 @@ struct TurnSnapshot {
 // Валидация стейтлес-намерений (echo). Используется и вне активной партии.
 IntentResult process_intent(const Intent &intent);
 
+// --- Лог боя для проигрывания клиентами (SPEC §9.3) ---
+struct BattleLogUnit {
+    int32_t id = 0;
+    int32_t team = 0;
+    bool attacker = false;
+    float x = 0.0f;
+    float z = 0.0f;
+    int32_t hp = 0;
+};
+
+struct BattleLogFrame {
+    int32_t tick = 0;
+    std::vector<BattleLogUnit> units;
+};
+
+struct BattleLog {
+    int32_t defender_player = 0;
+    int32_t defender_survivors = 0;
+    std::vector<int32_t> destroyed_buildings; // ID зданий, ставших Destroyed
+    std::vector<BattleLogFrame> frames;
+};
+
 // Партия: реестр EnTT и Turn State Machine. Живёт только на хосте.
 class Match {
 public:
@@ -253,6 +278,10 @@ public:
 
     // Продвижение стейт-машины на dt секунд. Возвращает события переходов.
     std::vector<Event> tick(double dt);
+
+    // Забрать и очистить логи боёв, разрешённых в последних тиках (для стрима
+    // визуализации боя клиентам, SPEC §9.3).
+    std::vector<BattleLog> take_battle_logs();
 
     TurnSnapshot snapshot() const;
 

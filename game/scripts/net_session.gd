@@ -12,6 +12,8 @@ signal match_started
 signal turn_state_changed(turn_state: Dictionary)
 ## Событие партии из ядра (ход, катастрофа) для ленты событий (SPEC §7).
 signal party_event(event: Dictionary)
+## Лог боя для проигрывания визуализации (SPEC §9.3).
+signal battle_ready(battle: Dictionary)
 
 const DEFAULT_PORT := 7777
 const MIN_SLOTS := 2
@@ -171,6 +173,7 @@ func host_start_match(timers: Dictionary) -> bool:
 		"buildings_json": _read_data_file("buildings.json"),
 		"dice_json": _read_data_file("dice.json"),
 		"disasters_json": _read_data_file("disasters.json"),
+		"combat_json": _read_data_file("combat.json"),
 	})
 	if not result["ok"]:
 		_broadcast_log("Старт партии отклонён ядром: %s" % result["reason"])
@@ -206,10 +209,11 @@ func _process(delta: float) -> void:
 	var events: Array = _core.tick(delta)
 	for event in events:
 		match event["type"]:
-			"turn_started":
+			"turn_started", "disaster", "battle":
 				_broadcast_party_event(event)
-			"disaster":
-				_broadcast_party_event(event)
+	# Логи боёв фазы Боя -> проигрывание визуализации у всех (SPEC §9.3).
+	for battle in _core.poll_battles():
+		_broadcast_battle(battle)
 	var need_sync := not events.is_empty()
 	# Оставшееся время таймера транслируется периодически (SPEC §12.2).
 	if float(turn_state.get("timer_remaining_sec", -1.0)) >= 0.0:
@@ -338,6 +342,11 @@ func _rpc_party_event(event: Dictionary) -> void:
 	party_event.emit(event)
 
 
+@rpc("authority", "call_remote", "reliable")
+func _rpc_battle(battle: Dictionary) -> void:
+	battle_ready.emit(battle)
+
+
 # --- Логика хоста ------------------------------------------------------------
 
 
@@ -367,6 +376,13 @@ func _broadcast_party_event(event: Dictionary) -> void:
 	party_event.emit(event)
 	if multiplayer.multiplayer_peer != null:
 		_rpc_party_event.rpc(event)
+
+
+## Лог боя всем участникам для проигрывания (SPEC §9.3).
+func _broadcast_battle(battle: Dictionary) -> void:
+	battle_ready.emit(battle)
+	if multiplayer.multiplayer_peer != null:
+		_rpc_battle.rpc(battle)
 
 
 func _host_set_ready(peer_id: int, ready: bool) -> void:

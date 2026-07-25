@@ -14,6 +14,13 @@
       "effect": "steal_resource",
       "steal_percent": 25,
       "steal_from": ["food", "wood", "stone", "gold"]
+    },
+    "pirates": {
+      "name": "Нашествие пиратов",
+      "tier": 3,
+      "target": "opponent",
+      "effect": "pirate_raid",
+      "pirate_count": 6
     }
   }
 }

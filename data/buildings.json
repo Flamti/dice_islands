@@ -7,7 +7,8 @@
       "cost": {},
       "hp": 60,
       "dice": "universal",
-      "preplaced": true
+      "preplaced": true,
+      "spawns_garrison": true
     },
     "farm": {
       "name": "Ферма",
@@ -49,7 +50,8 @@
       "size_x": 2, "size_z": 2,
       "cost": { "wood": 2, "stone": 4 },
       "hp": 20,
-      "dice": "swords"
+      "dice": "swords",
+      "spawns_garrison": true
     },
     "school": {
       "name": "Школа",
@@ -93,6 +95,20 @@
       "cost": { "wood": 2, "stone": 2, "gold": 2 },
       "hp": 10,
       "expansion": { "radius": 3, "max_cells": 16 }
+    },
+    "wall": {
+      "name": "Стена",
+      "size_x": 1, "size_z": 1,
+      "cost": { "stone": 2 },
+      "hp": 30,
+      "is_wall": true
+    },
+    "tower": {
+      "name": "Башня",
+      "size_x": 1, "size_z": 1,
+      "cost": { "wood": 1, "stone": 3 },
+      "hp": 24,
+      "is_tower": true
     }
   }
 }

@@ -1,0 +1,25 @@
+{
+  "tick_rate": 20,
+  "timeout_sec": 90,
+  "reward_percent": 30,
+  "frame_interval_ticks": 4,
+  "wall_defense_armor_bonus": 1,
+  "wall_detour_factor": 1.0,
+  "fighter": {
+    "hp": 10,
+    "strength": 2,
+    "attack_rate": 1.0,
+    "armor": 0,
+    "dodge": 0.05,
+    "range": 1,
+    "move_speed": 2.0
+  },
+  "tower": {
+    "radius": 4,
+    "damage": 3,
+    "rate": 0.8
+  },
+  "pirate": {
+    "count": 6
+  }
+}

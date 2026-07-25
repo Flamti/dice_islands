@@ -174,6 +174,12 @@ bool parse_buildings_json(const std::string &json_text, ecs::BuildingCatalog &ca
                 def_json.as_object().at("unlocks_research").as_bool();
         def.unlocks_raids = def_json.as_object().count("unlocks_raids") &&
                 def_json.as_object().at("unlocks_raids").as_bool();
+        def.is_wall = def_json.as_object().count("is_wall") &&
+                def_json.as_object().at("is_wall").as_bool();
+        def.is_tower = def_json.as_object().count("is_tower") &&
+                def_json.as_object().at("is_tower").as_bool();
+        def.spawns_garrison = def_json.as_object().count("spawns_garrison") &&
+                def_json.as_object().at("spawns_garrison").as_bool();
         if (def.size_x <= 0 || def.size_z <= 0 || def.hp <= 0) {
             error = "недопустимые габариты/HP здания " + id;
             return false;

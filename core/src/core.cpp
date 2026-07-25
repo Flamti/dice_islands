@@ -5,6 +5,8 @@
 #include "gen/island_gen.hpp"
 #include "math/rng.hpp"
 #include "net/intents.hpp"
+#include "systems/combat/battle.hpp"
+#include "systems/combat/resolve.hpp"
 #include "systems/danger.hpp"
 #include "systems/dice.hpp"
 #include "systems/economy.hpp"
@@ -42,6 +44,7 @@ IntentResult process_intent(const Intent &intent) {
 struct Match::Impl {
     entt::registry registry;
     bool active = false;
+    std::vector<BattleLog> battle_logs; // накоплены в фазе Боя, отдаются адаптеру
 
     entt::entity find_player_entity(int32_t player_id) {
         for (auto [entity, info] : registry.view<const ecs::PlayerInfo>().each()) {
@@ -151,6 +154,17 @@ bool Match::start(const MatchConfig &config, std::string &error) {
         const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
         impl_->registry.emplace<ecs::DisasterCatalog>(match, std::move(catalog));
     }
+    if (!config.combat_json.empty()) {
+        systems::combat::CombatConfig combat_config;
+        std::string parse_error;
+        if (!systems::combat::parse_combat_json(config.combat_json, combat_config, parse_error)) {
+            impl_->registry.clear();
+            error = kErrorBadCombatConfig;
+            return false;
+        }
+        const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
+        impl_->registry.emplace<systems::combat::CombatConfig>(match, combat_config);
+    }
     impl_->active = true;
     error.clear();
     return true;
@@ -186,7 +200,8 @@ std::vector<Event> Match::tick(double dt) {
     }
     // Эффекты фаз (SPEC §4) выполняются в момент входа, до продвижения дальше
     // внутри того же тика: активация -> сбор пула -> бросок -> конвертация.
-    const turn::PhaseHook hook = [&events](entt::registry &registry, Phase phase) {
+    std::vector<BattleLog> &battle_logs = impl_->battle_logs;
+    const turn::PhaseHook hook = [&events, &battle_logs](entt::registry &registry, Phase phase) {
         switch (phase) {
             case Phase::TurnStart:
                 // Активация построек, затем расширение платформами (SPEC §11.4):
@@ -209,12 +224,21 @@ std::vector<Event> Match::tick(double dt) {
             case Phase::Disasters:
                 systems::resolve_danger_phase(registry, events);
                 break;
+            case Phase::Combat:
+                systems::combat::resolve_combat_phase(registry, events, battle_logs);
+                break;
             default:
                 break;
         }
     };
     turn::tick(impl_->registry, dt, events, hook);
     return events;
+}
+
+std::vector<BattleLog> Match::take_battle_logs() {
+    std::vector<BattleLog> logs;
+    logs.swap(impl_->battle_logs);
+    return logs;
 }
 
 TurnSnapshot Match::snapshot() const {

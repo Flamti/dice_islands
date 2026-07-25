@@ -11,6 +11,7 @@ const DiceTrayScene := preload("res://ui/dice_tray.tscn")
 const ResourceBarScene := preload("res://ui/resource_bar.tscn")
 const DangerMeterScene := preload("res://ui/danger_meter.tscn")
 const EventFeedScene := preload("res://ui/event_feed.tscn")
+const BattleViewScene := preload("res://scenes/battle_view.tscn")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -53,6 +54,7 @@ var _dice_tray: Control
 var _resource_bar: Control
 var _danger_meter: Control
 var _event_feed: Control
+var _battle_view: Node3D
 
 
 func _ready() -> void:
@@ -295,6 +297,8 @@ func _on_match_started() -> void:
 	add_child(_danger_meter)
 	_event_feed = EventFeedScene.instantiate()
 	add_child(_event_feed)
+	_battle_view = BattleViewScene.instantiate()
+	add_child(_battle_view)
 
 
 func _on_match_leave_requested() -> void:
@@ -325,6 +329,9 @@ func _close_match_view() -> void:
 	if _event_feed != null:
 		_event_feed.queue_free()
 		_event_feed = null
+	if _battle_view != null:
+		_battle_view.queue_free()
+		_battle_view = null
 
 
 # --- Реакция на события сети -------------------------------------------------

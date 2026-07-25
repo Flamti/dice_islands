@@ -4,6 +4,7 @@
 #include "gen/island_gen.hpp"
 
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
@@ -39,6 +40,7 @@ const char *const kKeyGeneratorJson = "generator_json";
 const char *const kKeyBuildingsJson = "buildings_json";
 const char *const kKeyDiceJson = "dice_json";
 const char *const kKeyDisastersJson = "disasters_json";
+const char *const kKeyCombatJson = "combat_json";
 const char *const kKeyMatchSeed = "match_seed";
 const char *const kKeyDanger = "danger";
 const char *const kKeyDangerMax = "danger_max";
@@ -95,6 +97,7 @@ godot::Dictionary DiceCoreServer::start_match(const godot::Dictionary &config) {
     core_config.buildings_json = to_std_string(config.get(kKeyBuildingsJson, godot::String()));
     core_config.dice_json = to_std_string(config.get(kKeyDiceJson, godot::String()));
     core_config.disasters_json = to_std_string(config.get(kKeyDisastersJson, godot::String()));
+    core_config.combat_json = to_std_string(config.get(kKeyCombatJson, godot::String()));
     core_config.match_seed = static_cast<uint64_t>(int64_t(config.get(kKeyMatchSeed, 0)));
 
     const godot::Dictionary timers = config.get(kKeyTimers, godot::Dictionary());
@@ -131,6 +134,42 @@ godot::Array DiceCoreServer::tick(double dt) {
         godot::Dictionary entry;
         entry[kKeyType] = godot::String(event.type.c_str());
         entry[kKeyPayload] = payload_to_dictionary(event.payload);
+        out.push_back(entry);
+    }
+    return out;
+}
+
+godot::Array DiceCoreServer::poll_battles() {
+    godot::Array out;
+    for (const BattleLog &log : match_.take_battle_logs()) {
+        godot::Dictionary entry;
+        entry["defender"] = log.defender_player;
+        entry["defenders_left"] = log.defender_survivors;
+        godot::PackedInt32Array destroyed;
+        destroyed.resize(static_cast<int64_t>(log.destroyed_buildings.size()));
+        for (size_t i = 0; i < log.destroyed_buildings.size(); ++i) {
+            destroyed.set(static_cast<int64_t>(i), log.destroyed_buildings[i]);
+        }
+        entry["destroyed"] = destroyed;
+        godot::Array frames;
+        for (const BattleLogFrame &frame : log.frames) {
+            godot::Dictionary f;
+            f["tick"] = frame.tick;
+            godot::Array units;
+            for (const BattleLogUnit &u : frame.units) {
+                godot::Dictionary ud;
+                ud["id"] = u.id;
+                ud["team"] = u.team;
+                ud["attacker"] = u.attacker;
+                ud["x"] = u.x;
+                ud["z"] = u.z;
+                ud["hp"] = u.hp;
+                units.push_back(ud);
+            }
+            f["units"] = units;
+            frames.push_back(f);
+        }
+        entry["frames"] = frames;
         out.push_back(entry);
     }
     return out;
@@ -287,6 +326,7 @@ void DiceCoreServer::_bind_methods() {
     godot::ClassDB::bind_method(
             godot::D_METHOD("submit_intent", "player_id", "intent"), &DiceCoreServer::submit_intent);
     godot::ClassDB::bind_method(godot::D_METHOD("tick", "dt"), &DiceCoreServer::tick);
+    godot::ClassDB::bind_method(godot::D_METHOD("poll_battles"), &DiceCoreServer::poll_battles);
     godot::ClassDB::bind_method(godot::D_METHOD("get_turn_state"), &DiceCoreServer::get_turn_state);
     godot::ClassDB::bind_method(
             godot::D_METHOD("generate_island", "seed", "config_json"), &DiceCoreServer::generate_island);

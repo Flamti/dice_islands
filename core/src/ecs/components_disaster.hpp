@@ -16,6 +16,7 @@ inline constexpr const char *kTargetOpponent = "opponent"; // по чужой к
 
 // Эффекты катастроф (расширяется на этапе 12).
 inline constexpr const char *kEffectStealResource = "steal_resource";
+inline constexpr const char *kEffectPirateRaid = "pirate_raid";
 
 // Порог шкалы: значение крестов -> тяжесть I..IV.
 struct DangerThreshold {
@@ -33,6 +34,8 @@ struct DisasterDef {
     // Параметры steal_resource:
     int32_t steal_percent = 0;
     std::vector<std::string> steal_from; // ключи ресурсов ("food", ...)
+    // Параметры pirate_raid:
+    int32_t pirate_count = 6;
 };
 
 // Компонент сущности партии: шкала и пул катастроф.
