@@ -1,0 +1,25 @@
+#!/usr/bin/env python
+"""Сборка C++ ядра Dice Islands как GDExtension-библиотеки.
+
+godot-cpp собирается из сабмодуля (master) против API-дампов нашего точного
+бинарника Godot 4.7.1 (core/extern/api, см. ARCHITECTURE.md): официальной
+ветки godot-cpp под 4.7 нет, custom-дамп — штатный механизм godot-cpp.
+"""
+
+# Значение по умолчанию; переопределяется аргументом командной строки scons.
+ARGUMENTS.setdefault("gdextension_dir", "extern/api")
+
+env = SConscript("extern/godot-cpp/SConstruct")
+
+env.Append(CPPPATH=["include/", "src/", "extern/entt/single_include/"])
+
+sources = Glob("src/*.cpp") + Glob("src/adapter/*.cpp")
+
+# Библиотека кладётся сразу в аддон Godot-проекта; суффикс (платформа/цель/арх)
+# должен совпадать с путями в game/addons/dicecore/dicecore.gdextension.
+library = env.SharedLibrary(
+    "../game/addons/dicecore/bin/libdicecore{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+env.NoCache(library)
+Default(library)

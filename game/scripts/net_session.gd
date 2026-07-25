@@ -1,0 +1,320 @@
+extends Node
+## Сетевой синглтон (autoload). Host-authoritative лобби по SPEC §12:
+## истинный стейт и ядро — у хоста; гости шлют намерения и получают
+## подтверждённые изменения стейта.
+
+signal lobby_state_changed(state: Dictionary)
+signal join_rejected(reason: String)
+signal intent_confirmed(result: Dictionary)
+signal log_message(text: String)
+signal connection_lost
+
+const DEFAULT_PORT := 7777
+const MIN_SLOTS := 2
+const MAX_SLOTS := 16
+const DEFAULT_SLOT_COUNT := 4
+const DEFAULT_TEAM := 1
+const SERVER_PEER_ID := 1 ## фиксированный peer id хоста в High-Level Multiplayer
+
+const REJECT_WRONG_PASSWORD := "wrong_password"
+const REJECT_LOBBY_FULL := "lobby_full"
+## Пауза перед принудительным отключением отклонённого гостя: RPC с причиной
+## отказа рассылается при poll в конце кадра — мгновенный кик его обгоняет.
+const KICK_DELAY_SEC := 0.5
+
+enum SlotKind { EMPTY, HUMAN, AI }
+
+## Ядро создаётся только у хоста (guest не считает логику вообще).
+var _core: Object = null
+var is_host := false
+## Пароль партии хранится только у хоста и никогда не попадает в стейт лобби.
+var _host_password := ""
+## Параметры входа гостя: отправляются хосту после установления соединения.
+var _pending_join := {}
+## Реплицируемый стейт лобби: {"slot_count": int, "slots": Array[Dictionary]}.
+var state := {}
+
+
+func _ready() -> void:
+	multiplayer.peer_connected.connect(_on_peer_connected)
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.connected_to_server.connect(_on_connected_to_server)
+	multiplayer.connection_failed.connect(_on_connection_failed)
+	multiplayer.server_disconnected.connect(_on_server_disconnected)
+
+
+# --- Публичный API (вызывается из UI) ---------------------------------------
+
+
+func host_match(port: int, password: String, slot_count: int, host_name: String) -> Error:
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_server(port, MAX_SLOTS)
+	if err != OK:
+		return err
+	multiplayer.multiplayer_peer = peer
+	is_host = true
+	_core = ClassDB.instantiate(&"DiceCoreServer")
+	_host_password = password
+	state = _make_empty_state(clampi(slot_count, MIN_SLOTS, MAX_SLOTS))
+	_occupy_slot(0, SlotKind.HUMAN, SERVER_PEER_ID, host_name)
+	_broadcast_state()
+	_broadcast_log("Партия создана (ядро %s)" % core_version())
+	return OK
+
+
+func join_match(address: String, port: int, password: String, player_name: String) -> Error:
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_client(address, port)
+	if err != OK:
+		return err
+	multiplayer.multiplayer_peer = peer
+	is_host = false
+	_pending_join = {"password": password, "name": player_name}
+	return OK
+
+
+func leave() -> void:
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
+	multiplayer.multiplayer_peer = null
+	is_host = false
+	_core = null
+	_host_password = ""
+	_pending_join = {}
+	state = {}
+
+
+func core_version() -> String:
+	return _core.get_core_version() if _core != null else ""
+
+
+## Отправка намерения хосту. Единственный путь команд в ядро (SPEC §12.1).
+func submit_intent(intent: Dictionary) -> void:
+	if is_host:
+		_host_handle_intent(SERVER_PEER_ID, intent)
+	else:
+		_rpc_submit_intent.rpc_id(SERVER_PEER_ID, intent)
+
+
+func set_ready(ready: bool) -> void:
+	if is_host:
+		_host_set_ready(SERVER_PEER_ID, ready)
+	else:
+		_rpc_set_ready.rpc_id(SERVER_PEER_ID, ready)
+
+
+# --- Управление лобби (только хост) -----------------------------------------
+
+
+func host_set_slot_count(slot_count: int) -> void:
+	if not is_host:
+		return
+	var new_count := clampi(slot_count, MIN_SLOTS, MAX_SLOTS)
+	var slots: Array = state["slots"]
+	while slots.size() > new_count:
+		var last: Dictionary = slots[slots.size() - 1]
+		if last["kind"] == SlotKind.HUMAN:
+			return # нельзя срезать слот с живым игроком
+		slots.pop_back()
+	while slots.size() < new_count:
+		slots.append(_make_empty_slot())
+	state["slot_count"] = new_count
+	_broadcast_state()
+
+
+func host_set_ai(slot_index: int, enabled: bool) -> void:
+	if not is_host or not _slot_index_valid(slot_index):
+		return
+	var slot: Dictionary = state["slots"][slot_index]
+	if slot["kind"] == SlotKind.HUMAN:
+		return
+	if enabled:
+		_occupy_slot(slot_index, SlotKind.AI, 0, "ИИ %d" % (slot_index + 1))
+		state["slots"][slot_index]["ready"] = true # ИИ всегда готов
+	else:
+		state["slots"][slot_index] = _make_empty_slot()
+	_broadcast_state()
+
+
+func host_set_team(slot_index: int, team: int) -> void:
+	if not is_host or not _slot_index_valid(slot_index):
+		return
+	state["slots"][slot_index]["team"] = maxi(DEFAULT_TEAM, team)
+	_broadcast_state()
+
+
+# --- RPC гость -> хост -------------------------------------------------------
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_request_join(password: String, player_name: String) -> void:
+	if not is_host:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if password != _host_password:
+		_broadcast_log("Отклонено подключение (неверный пароль)")
+		_rpc_join_rejected.rpc_id(sender, REJECT_WRONG_PASSWORD)
+		_kick(sender)
+		return
+	var slot_index := _find_free_slot()
+	if slot_index < 0:
+		_rpc_join_rejected.rpc_id(sender, REJECT_LOBBY_FULL)
+		_kick(sender)
+		return
+	_occupy_slot(slot_index, SlotKind.HUMAN, sender, player_name)
+	_broadcast_state()
+	_broadcast_log("Игрок «%s» занял слот %d" % [player_name, slot_index + 1])
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_set_ready(ready: bool) -> void:
+	if is_host:
+		_host_set_ready(multiplayer.get_remote_sender_id(), ready)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_submit_intent(intent: Dictionary) -> void:
+	if is_host:
+		_host_handle_intent(multiplayer.get_remote_sender_id(), intent)
+
+
+# --- RPC хост -> гость -------------------------------------------------------
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_receive_state(new_state: Dictionary) -> void:
+	state = new_state
+	lobby_state_changed.emit(state)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_join_rejected(reason: String) -> void:
+	join_rejected.emit(reason)
+	leave()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_intent_result(result: Dictionary) -> void:
+	intent_confirmed.emit(result)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_log_line(text: String) -> void:
+	log_message.emit(text)
+
+
+# --- Логика хоста ------------------------------------------------------------
+
+
+func _host_handle_intent(sender: int, intent: Dictionary) -> void:
+	var result: Dictionary = _core.submit_intent(intent)
+	var verdict: String = "принято" if result["accepted"] else "отклонено (%s)" % result["reason"]
+	_broadcast_log("Намерение «%s» от peer %d: %s" % [result["type"], sender, verdict])
+	if sender == SERVER_PEER_ID:
+		intent_confirmed.emit(result)
+	else:
+		_rpc_intent_result.rpc_id(sender, result)
+
+
+func _host_set_ready(peer_id: int, ready: bool) -> void:
+	var slot_index := _find_slot_by_peer(peer_id)
+	if slot_index < 0:
+		return
+	state["slots"][slot_index]["ready"] = ready
+	_broadcast_state()
+
+
+func _broadcast_state() -> void:
+	lobby_state_changed.emit(state)
+	if multiplayer.multiplayer_peer != null:
+		_rpc_receive_state.rpc(state)
+
+
+func _broadcast_log(text: String) -> void:
+	log_message.emit(text)
+	if multiplayer.multiplayer_peer != null:
+		_rpc_log_line.rpc(text)
+
+
+func _kick(peer_id: int) -> void:
+	await get_tree().create_timer(KICK_DELAY_SEC).timeout
+	# Гость мог уже отключиться сам, получив причину отказа.
+	if multiplayer.multiplayer_peer != null and peer_id in multiplayer.get_peers():
+		multiplayer.multiplayer_peer.disconnect_peer(peer_id, false)
+
+
+# --- Обработчики соединения --------------------------------------------------
+
+
+func _on_peer_connected(_id: int) -> void:
+	# Слот выдаётся только после проверки пароля в _rpc_request_join.
+	pass
+
+
+func _on_peer_disconnected(id: int) -> void:
+	if not is_host:
+		return
+	var slot_index := _find_slot_by_peer(id)
+	if slot_index >= 0:
+		var player_name: String = state["slots"][slot_index]["name"]
+		state["slots"][slot_index] = _make_empty_slot()
+		_broadcast_state()
+		_broadcast_log("Игрок «%s» покинул партию" % player_name)
+
+
+func _on_connected_to_server() -> void:
+	_rpc_request_join.rpc_id(SERVER_PEER_ID, _pending_join["password"], _pending_join["name"])
+	_pending_join = {}
+
+
+func _on_connection_failed() -> void:
+	connection_lost.emit()
+	leave()
+
+
+func _on_server_disconnected() -> void:
+	connection_lost.emit()
+	leave()
+
+
+# --- Стейт лобби -------------------------------------------------------------
+
+
+func _make_empty_state(slot_count: int) -> Dictionary:
+	var slots: Array = []
+	for i in slot_count:
+		slots.append(_make_empty_slot())
+	return {"slot_count": slot_count, "slots": slots}
+
+
+func _make_empty_slot() -> Dictionary:
+	return {"kind": SlotKind.EMPTY, "peer_id": 0, "name": "", "team": DEFAULT_TEAM, "ready": false}
+
+
+func _occupy_slot(slot_index: int, kind: SlotKind, peer_id: int, player_name: String) -> void:
+	state["slots"][slot_index] = {
+		"kind": kind,
+		"peer_id": peer_id,
+		"name": player_name,
+		"team": DEFAULT_TEAM,
+		"ready": false,
+	}
+
+
+func _find_free_slot() -> int:
+	for i in state["slots"].size():
+		if state["slots"][i]["kind"] == SlotKind.EMPTY:
+			return i
+	return -1
+
+
+func _find_slot_by_peer(peer_id: int) -> int:
+	for i in state["slots"].size():
+		var slot: Dictionary = state["slots"][i]
+		if slot["kind"] == SlotKind.HUMAN and slot["peer_id"] == peer_id:
+			return i
+	return -1
+
+
+func _slot_index_valid(slot_index: int) -> bool:
+	return slot_index >= 0 and slot_index < state["slots"].size()

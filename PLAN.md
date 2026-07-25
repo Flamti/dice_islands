@@ -6,12 +6,12 @@
 
 ---
 
-## [ ] Этап 1. Каркас сборки и сетевой каркас
+## [x] Этап 1. Каркас сборки и сетевой каркас
 
-Репозиторная структура из `ARCHITECTURE.md`; сабмодули godot-cpp (4.7) и EnTT; SConstruct; минимальное ядро с адаптером (ядро отдаёт версию и принимает «эхо»-намерение); Godot-проект; ENet-лобби: создание партии (слоты 2–16, пароль), подключение гостя, назначение команд, добавление ИИ в слоты, кнопка «Готов»; намерения гоняются клиент → хост → подтверждение.
+Репозиторная структура из `ARCHITECTURE.md`; сабмодули godot-cpp (master + API-дампы из бинарника 4.7.1, официальной ветки 4.7 нет) и EnTT (v3.9.0); SConstruct; минимальное ядро с адаптером (версия + «эхо»-намерение); Godot-проект; ENet-лобби: создание партии (слоты 2–16, пароль), подключение гостя, назначение команд, добавление ИИ в слоты, кнопка «Готов»; намерения гоняются клиент → хост → подтверждение. Протокол намерений этапа 1 живёт в `game/scripts/net_session.gd` (транспорт — зона Godot); `core/src/net/` появится с этапа 2, когда в ядре будет стейт.
 
-- **Файлы:** `core/SConstruct`, `core/extern/*`, `core/include/dicecore/*`, `core/src/adapter/*`, `core/src/net/*`, `core/tests/test_smoke.cpp`, `game/project.godot`, `game/addons/dicecore/*`, `game/scenes/lobby.tscn`, `game/scripts/lobby.gd`, `scripts/build.sh`, `scripts/test.sh`, `scripts/gd_check.sh`
-- **Тест:** `scripts/build.sh` собирает .so; два экземпляра игры соединяются по паролю, слоты и команды видны обоим, «эхо»-намерение гостя возвращается подтверждением хоста.
+- **Файлы:** `core/SConstruct`, `core/extern/*`, `core/include/dicecore/core.hpp`, `core/src/core.cpp`, `core/src/adapter/*`, `core/tests/test_smoke.cpp`, `game/project.godot`, `game/addons/dicecore/dicecore.gdextension`, `game/scenes/lobby.tscn`, `game/scripts/{lobby,net_session,smoke_runner}.gd`, `scripts/{build,test,gd_check,net_smoke}.sh`
+- **Тест:** `scripts/build.sh` собирает .so и регистрирует расширение (`--import`); `scripts/test.sh` — unit-тесты ядра; `scripts/net_smoke.sh` — интеграционный прогон: хост + отказ по неверному паролю + гость (видит слоты/команды/ИИ, эхо-намерение подтверждается ядром хоста).
 
 ## [ ] Этап 2. Ядро ECS и Turn State Machine
 

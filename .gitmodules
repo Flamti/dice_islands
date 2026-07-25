@@ -1,0 +1,6 @@
+[submodule "core/extern/godot-cpp"]
+	path = core/extern/godot-cpp
+	url = https://github.com/godotengine/godot-cpp
+[submodule "core/extern/entt"]
+	path = core/extern/entt
+	url = https://github.com/skypjack/entt
