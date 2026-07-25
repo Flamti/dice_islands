@@ -1,6 +1,7 @@
 #include "systems/expansion.hpp"
 
 #include "ecs/components_building.hpp"
+#include "ecs/components_research.hpp"
 #include "gen/island_gen.hpp"
 
 #include <algorithm>
@@ -100,8 +101,18 @@ void expand_platforms(entt::registry &registry, std::vector<Event> &events) {
             return a.cz != b.cz ? a.cz < b.cz : a.cx < b.cx;
         });
 
+        // Инженерия (SPEC §8): платформа даёт +% клеток-лесов.
+        int32_t limit = def.expansion_max_cells;
+        const auto *research_catalog = registry.try_get<const ecs::ResearchCatalog>(match_entity(registry));
+        const auto *player_research = registry.try_get<const ecs::PlayerResearch>(player_entity);
+        if (research_catalog != nullptr && player_research != nullptr &&
+                player_research->has(ecs::kResearchEngineering)) {
+            const int32_t percent = research_catalog->param(ecs::kResearchEngineering,
+                    "expansion_percent", 0);
+            limit += limit * percent / 100;
+        }
+
         int32_t added = 0;
-        const int32_t limit = def.expansion_max_cells;
         for (const Candidate &c : candidates) {
             if (added >= limit) {
                 break;

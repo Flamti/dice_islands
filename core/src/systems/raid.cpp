@@ -2,6 +2,7 @@
 
 #include "ecs/components.hpp"
 #include "ecs/components_building.hpp"
+#include "ecs/components_research.hpp"
 #include "systems/combat/battle.hpp"
 
 #include <cstdlib>
@@ -117,7 +118,20 @@ IntentResult handle_raid(entt::registry &registry, int32_t player_id, const Inte
         result.reason = kRejectBadRaidTarget;
         return result;
     }
-    if (count < 1 || count > config->raid_capacity) {
+    // Исследования (SPEC §8): Тактика поднимает вместимость, Стратегия — лимит.
+    const auto *research_catalog = registry.try_get<const ecs::ResearchCatalog>(match);
+    const auto *player_research = registry.try_get<const ecs::PlayerResearch>(attacker);
+    int32_t capacity = config->raid_capacity;
+    int32_t raid_limit = config->raids_per_turn;
+    if (research_catalog != nullptr && player_research != nullptr) {
+        if (player_research->has(ecs::kResearchTactics)) {
+            capacity += research_catalog->param(ecs::kResearchTactics, "raid_capacity_bonus", 0);
+        }
+        if (player_research->has(ecs::kResearchStrategy)) {
+            raid_limit = research_catalog->param(ecs::kResearchStrategy, "raids_per_turn", raid_limit);
+        }
+    }
+    if (count < 1 || count > capacity) {
         result.reason = kRejectBadRaidCount;
         return result;
     }
@@ -127,7 +141,7 @@ IntentResult handle_raid(entt::registry &registry, int32_t player_id, const Inte
         return result;
     }
     auto &pending = registry.get_or_emplace<ecs::PendingRaids>(match);
-    if (raids_by_owner(pending, player_id) >= config->raids_per_turn) {
+    if (raids_by_owner(pending, player_id) >= raid_limit) {
         result.reason = kRejectRaidLimit;
         return result;
     }

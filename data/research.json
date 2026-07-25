@@ -1,0 +1,19 @@
+{
+  "branches": {
+    "economy": [
+      { "id": "craft", "name": "Ремесло", "cost": 4, "params": { "hammers_per_turn": 1 } },
+      { "id": "logistics", "name": "Логистика", "cost": 7, "params": { "cap_bonus": 10 } },
+      { "id": "engineering", "name": "Инженерия", "cost": 12, "params": { "expansion_percent": 50 } }
+    ],
+    "war": [
+      { "id": "tactics", "name": "Тактика", "cost": 4, "params": { "raid_capacity_bonus": 2 } },
+      { "id": "fortification", "name": "Фортификация", "cost": 7, "params": { "wall_hp_bonus": 15, "tower_damage_percent": 25 } },
+      { "id": "strategy", "name": "Стратегия", "cost": 12, "params": { "raids_per_turn": 2 } }
+    ],
+    "magic": [
+      { "id": "clairvoyance", "name": "Ясновидение", "cost": 4, "params": {} },
+      { "id": "dark_magic", "name": "Тёмная магия", "cost": 8, "params": {} },
+      { "id": "storm_rite", "name": "Обряд бури", "cost": 14, "params": {} }
+    ]
+  }
+}

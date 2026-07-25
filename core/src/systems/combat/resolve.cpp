@@ -2,11 +2,11 @@
 
 #include "ecs/components.hpp"
 #include "ecs/components_building.hpp"
+#include "ecs/components_research.hpp"
 #include "gen/island_gen.hpp"
 #include "math/rng.hpp"
 #include "systems/combat/battle.hpp"
 
-#include <algorithm>
 #include <map>
 #include <string>
 
@@ -107,6 +107,18 @@ void resolve_combat_phase(entt::registry &registry, std::vector<Event> &events,
         setup.defender_team = defender_info.team;
         setup.defender_garrison = defender_res.swords;
 
+        // Фортификация защитника (SPEC §8): стены +HP, башни +% урона.
+        const auto *research_catalog = registry.try_get<const ecs::ResearchCatalog>(match);
+        const auto *player_research = registry.try_get<const ecs::PlayerResearch>(defender_entity);
+        const bool fortified = research_catalog != nullptr && player_research != nullptr &&
+                player_research->has(ecs::kResearchFortification);
+        const int32_t wall_hp_bonus = fortified
+                ? research_catalog->param(ecs::kResearchFortification, "wall_hp_bonus", 0)
+                : 0;
+        const int32_t tower_dmg_percent = fortified
+                ? research_catalog->param(ecs::kResearchFortification, "tower_damage_percent", 0)
+                : 0;
+
         // Живые (не Destroyed) здания защитника; карта entity id -> индекс.
         std::map<int32_t, int32_t> id_to_index;
         for (auto [entity, building] : registry.view<const ecs::Building>().each()) {
@@ -121,10 +133,13 @@ void resolve_combat_phase(entt::registry &registry, std::vector<Event> &events,
             bb.cell_z = building.cell_z;
             bb.size_x = building.size_x;
             bb.size_z = building.size_z;
-            bb.hp = building.hp;
+            bb.hp = building.hp + (def.is_wall ? wall_hp_bonus : 0);
             bb.is_wall = def.is_wall;
             bb.is_tower = def.is_tower;
             bb.spawns_garrison = def.spawns_garrison;
+            if (def.is_tower && tower_dmg_percent > 0) {
+                bb.tower_damage = config->tower_damage + config->tower_damage * tower_dmg_percent / 100;
+            }
             id_to_index[bb.id] = static_cast<int32_t>(setup.buildings.size());
             setup.buildings.push_back(bb);
         }

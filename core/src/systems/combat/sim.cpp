@@ -447,7 +447,8 @@ BattleResult simulate_battle(const BattleSetup &setup, uint64_t seed) {
                 const float roll = static_cast<float>(battle.rng.range_double(0.0, 1.0));
                 if (roll >= cfg.fighter.dodge) {
                     SimFighter &f = battle.fighters[best];
-                    f.hp -= cfg.tower_damage;
+                    // Урон башни: переопределённый (Фортификация) либо базовый.
+                    f.hp -= b.def.tower_damage > 0 ? b.def.tower_damage : cfg.tower_damage;
                     if (f.hp <= 0) {
                         f.alive = false;
                     }

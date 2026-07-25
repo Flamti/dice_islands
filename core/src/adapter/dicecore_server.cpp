@@ -41,6 +41,7 @@ const char *const kKeyBuildingsJson = "buildings_json";
 const char *const kKeyDiceJson = "dice_json";
 const char *const kKeyDisastersJson = "disasters_json";
 const char *const kKeyCombatJson = "combat_json";
+const char *const kKeyResearchJson = "research_json";
 const char *const kKeyMatchSeed = "match_seed";
 const char *const kKeyDanger = "danger";
 const char *const kKeyDangerMax = "danger_max";
@@ -98,6 +99,7 @@ godot::Dictionary DiceCoreServer::start_match(const godot::Dictionary &config) {
     core_config.dice_json = to_std_string(config.get(kKeyDiceJson, godot::String()));
     core_config.disasters_json = to_std_string(config.get(kKeyDisastersJson, godot::String()));
     core_config.combat_json = to_std_string(config.get(kKeyCombatJson, godot::String()));
+    core_config.research_json = to_std_string(config.get(kKeyResearchJson, godot::String()));
     core_config.match_seed = static_cast<uint64_t>(int64_t(config.get(kKeyMatchSeed, 0)));
 
     const godot::Dictionary timers = config.get(kKeyTimers, godot::Dictionary());
@@ -209,6 +211,12 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
         caps["stone"] = player.cap_stone;
         entry["caps"] = caps;
         entry[kKeyDanger] = player.danger;
+        entry["research_available"] = player.research_available;
+        godot::Array research;
+        for (const std::string &effect : player.research) {
+            research.push_back(godot::String(effect.c_str()));
+        }
+        entry["research"] = research;
         entry[kKeyRerollsLeft] = player.rerolls_left;
         godot::Array scaffolds;
         for (const CellRef &cell : player.scaffolds) {

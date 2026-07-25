@@ -3,8 +3,10 @@
 #include "ecs/components.hpp"
 #include "ecs/components_building.hpp"
 #include "ecs/components_disaster.hpp"
+#include "ecs/components_research.hpp"
 #include "gen/island_gen.hpp"
 #include "systems/economy.hpp"
+#include "systems/research.hpp"
 
 #include <algorithm>
 #include <string>
@@ -228,6 +230,14 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
         player.culture = res.culture;
         const auto *meter = registry.try_get<const ecs::DangerMeter>(entity);
         player.danger = meter != nullptr ? meter->value : 0;
+        // Исследования: доступность (активный университет) и изученное (SPEC §8).
+        player.research_available = systems::has_active_university(registry, info.id);
+        const auto *research = registry.try_get<const ecs::PlayerResearch>(entity);
+        if (research != nullptr) {
+            for (const std::string &effect : research->unlocked) {
+                player.research.push_back(effect);
+            }
+        }
         // Эффективные капы с учётом складов и динамика сетки (леса, POI).
         const auto *grid = registry.try_get<const ecs::PlayerGrid>(entity);
         if (grid != nullptr) {

@@ -19,6 +19,7 @@ inline constexpr const char *kIntentDemolish = "demolish";
 inline constexpr const char *kIntentReroll = "reroll";
 inline constexpr const char *kIntentHarvest = "harvest"; // добыча POI молотком
 inline constexpr const char *kIntentRaid = "raid"; // отправка рейда (SPEC §9.4)
+inline constexpr const char *kIntentResearch = "research"; // покупка узла (SPEC §8)
 
 // Ключи полезной нагрузки намерений.
 inline constexpr const char *kPayloadReady = "ready";
@@ -30,6 +31,7 @@ inline constexpr const char *kPayloadTargetPlayer = "target_player";
 inline constexpr const char *kPayloadTargetBuilding = "target_building"; // ID сущности
 inline constexpr const char *kPayloadCount = "count";
 inline constexpr const char *kPayloadSide = "side"; // сторона высадки 0..3
+inline constexpr const char *kPayloadNode = "node"; // id узла исследования
 
 // Коды отказа валидации намерений.
 inline constexpr const char *kRejectUnknownIntent = "unknown_intent_type";
@@ -58,6 +60,11 @@ inline constexpr const char *kRejectBadRaidCount = "bad_raid_count";
 inline constexpr const char *kRejectNotEnoughGarrison = "not_enough_garrison";
 inline constexpr const char *kRejectRaidLimit = "raid_limit_reached";
 inline constexpr const char *kRejectAllyTarget = "cannot_raid_ally";
+inline constexpr const char *kRejectNoUniversity = "no_active_university";
+inline constexpr const char *kRejectUnknownNode = "unknown_research_node";
+inline constexpr const char *kRejectAlreadyResearched = "already_researched";
+inline constexpr const char *kRejectNodeLocked = "research_node_locked";
+inline constexpr const char *kRejectNotEnoughCulture = "not_enough_culture";
 
 // Коды ошибок старта партии.
 inline constexpr const char *kErrorMatchAlreadyActive = "match_already_active";
@@ -68,6 +75,7 @@ inline constexpr const char *kErrorNoCastleSpot = "no_castle_spot";
 inline constexpr const char *kErrorBadDiceConfig = "bad_dice_config";
 inline constexpr const char *kErrorBadDisastersConfig = "bad_disasters_config";
 inline constexpr const char *kErrorBadCombatConfig = "bad_combat_config";
+inline constexpr const char *kErrorBadResearchConfig = "bad_research_config";
 
 // Максимум перебросов за ход (SPEC §6).
 inline constexpr int32_t kMaxRerolls = 2;
@@ -144,6 +152,7 @@ struct MatchConfig {
     std::string dice_json;
     std::string disasters_json;
     std::string combat_json;
+    std::string research_json;
 };
 
 // Плоское намерение игрока: тип + строковая полезная нагрузка.
@@ -216,9 +225,11 @@ struct PlayerSnapshot {
     int32_t cap_stone = 0;
     int32_t danger = 0; // текущее заполнение шкалы опасности (SPEC §7.1)
     int32_t rerolls_left = 0;
+    bool research_available = false; // активный университет (SPEC §8)
     std::vector<DieSnapshot> dice; // пул от Дохода до Катастроф, иначе пуст
     std::vector<CellRef> scaffolds; // клетки-леса от платформ (SPEC §11.4)
     std::vector<PoiRef> pois; // оставшиеся POI на острове
+    std::vector<std::string> research; // изученные эффекты (id узлов)
 };
 
 // Снимок здания для UI.

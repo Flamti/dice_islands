@@ -174,6 +174,7 @@ func host_start_match(timers: Dictionary) -> bool:
 		"dice_json": _read_data_file("dice.json"),
 		"disasters_json": _read_data_file("disasters.json"),
 		"combat_json": _read_data_file("combat.json"),
+		"research_json": _read_data_file("research.json"),
 	})
 	if not result["ok"]:
 		_broadcast_log("Старт партии отклонён ядром: %s" % result["reason"])

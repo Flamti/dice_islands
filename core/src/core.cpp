@@ -12,6 +12,7 @@
 #include "systems/economy.hpp"
 #include "systems/expansion.hpp"
 #include "systems/placement.hpp"
+#include "systems/research.hpp"
 #include "systems/upkeep.hpp"
 #include "turn/turn_machine.hpp"
 
@@ -165,6 +166,17 @@ bool Match::start(const MatchConfig &config, std::string &error) {
         const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
         impl_->registry.emplace<systems::combat::CombatConfig>(match, combat_config);
     }
+    if (!config.research_json.empty()) {
+        ecs::ResearchCatalog catalog;
+        std::string parse_error;
+        if (!systems::parse_research_json(config.research_json, catalog, parse_error)) {
+            impl_->registry.clear();
+            error = kErrorBadResearchConfig;
+            return false;
+        }
+        const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
+        impl_->registry.emplace<ecs::ResearchCatalog>(match, std::move(catalog));
+    }
     impl_->active = true;
     error.clear();
     return true;
@@ -220,6 +232,7 @@ std::vector<Event> Match::tick(double dt) {
                 break;
             case Phase::Resources:
                 systems::apply_dice_income(registry);
+                systems::apply_research_income(registry); // Ремесло: +молотки/ход
                 break;
             case Phase::Disasters:
                 systems::resolve_danger_phase(registry, events);

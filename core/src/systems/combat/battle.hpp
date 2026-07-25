@@ -52,6 +52,7 @@ struct BattleBuilding {
     bool is_wall = false;
     bool is_tower = false;
     bool spawns_garrison = false;
+    int32_t tower_damage = 0; // >0 — переопределяет урон башни (Фортификация)
 };
 
 // Отряд атакующих (рейд или пираты).

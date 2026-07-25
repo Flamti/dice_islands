@@ -2,6 +2,7 @@
 
 #include "ecs/components.hpp"
 #include "ecs/components_building.hpp"
+#include "ecs/components_research.hpp"
 
 #include <algorithm>
 
@@ -29,15 +30,26 @@ ecs::Resources effective_caps(const entt::registry &registry, entt::entity match
         return caps; // без базовых капов складам нечего поднимать
     }
     const int32_t player_id = registry.get<const ecs::PlayerInfo>(player).id;
+    // Логистика (SPEC §8): активные склады игрока дают +к капам сверх базового.
+    const auto *research_catalog = registry.try_get<const ecs::ResearchCatalog>(match);
+    const auto *player_research = registry.try_get<const ecs::PlayerResearch>(player);
+    int32_t logistics_bonus = 0;
+    if (research_catalog != nullptr && player_research != nullptr &&
+            player_research->has(ecs::kResearchLogistics)) {
+        logistics_bonus = research_catalog->param(ecs::kResearchLogistics, "cap_bonus", 0);
+    }
     for (auto [entity, building] : registry.view<const ecs::Building>().each()) {
         if (building.player_id != player_id ||
                 building.status != static_cast<int32_t>(BuildingStatus::Active)) {
             continue;
         }
         const ecs::BuildingDef &def = buildings->defs[building.def_index];
-        caps.food += def.cap_food;
-        caps.wood += def.cap_wood;
-        caps.stone += def.cap_stone;
+        const int32_t bonus = def.cap_food > 0 || def.cap_wood > 0 || def.cap_stone > 0
+                ? logistics_bonus
+                : 0; // бонус — только к складам
+        caps.food += def.cap_food + bonus;
+        caps.wood += def.cap_wood + bonus;
+        caps.stone += def.cap_stone + bonus;
     }
     return caps;
 }
