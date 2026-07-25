@@ -13,7 +13,7 @@
 - **Файлы:** `core/SConstruct`, `core/extern/*`, `core/include/dicecore/core.hpp`, `core/src/core.cpp`, `core/src/adapter/*`, `core/tests/test_smoke.cpp`, `game/project.godot`, `game/addons/dicecore/dicecore.gdextension`, `game/scenes/lobby.tscn`, `game/scripts/{lobby,net_session,smoke_runner}.gd`, `scripts/{build,test,gd_check,net_smoke}.sh`
 - **Тест:** `scripts/build.sh` собирает .so и регистрирует расширение (`--import`); `scripts/test.sh` — unit-тесты ядра; `scripts/net_smoke.sh` — интеграционный прогон: хост + отказ по неверному паролю + гость (видит слоты/команды/ИИ, эхо-намерение подтверждается ядром хоста).
 
-## [ ] Этап 2. Ядро ECS и Turn State Machine
+## [x] Этап 2. Ядро ECS и Turn State Machine
 
 Реестр EnTT; компоненты партии/игрока/ресурсов; стейт-машина фаз 0–9 (SPEC §4) с барьерами `PhaseReady` и таймерами фаз (настройка в лобби); автозавершение решений по таймеру; пустые авто-фазы. ИИ-заглушка: мгновенно шлёт `PhaseReady`.
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Unit-тесты чистого C++ ядра: собираются g++ без Godot и запускаются.
+# Каждый tests/test_*.cpp — самостоятельный бинарник со своим main().
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -7,15 +8,31 @@ BUILD_DIR="$ROOT/build/tests"
 CXX="${CXX:-g++}"
 CXXFLAGS="${CXXFLAGS:--std=c++17 -Wall -Wextra -Werror -g -fsanitize=address,undefined}"
 
+CORE_SOURCES=(
+    "$ROOT"/core/src/*.cpp
+    "$ROOT"/core/src/ecs/*.cpp
+    "$ROOT"/core/src/turn/*.cpp
+    "$ROOT"/core/src/net/*.cpp
+)
+INCLUDES=(
+    -I"$ROOT/core/include"
+    -I"$ROOT/core/src"
+    -I"$ROOT/core/extern/entt/single_include"
+)
+
 mkdir -p "$BUILD_DIR"
 
-echo "==> Сборка тестов ядра"
-# shellcheck disable=SC2086  # CXXFLAGS намеренно разворачивается по словам
-"$CXX" $CXXFLAGS \
-    -I"$ROOT/core/include" \
-    "$ROOT/core/src/core.cpp" \
-    "$ROOT"/core/tests/test_*.cpp \
-    -o "$BUILD_DIR/core_tests"
+for test_src in "$ROOT"/core/tests/test_*.cpp; do
+    name="$(basename "$test_src" .cpp)"
+    echo "==> Сборка $name"
+    sources=()
+    for pattern in "${CORE_SOURCES[@]}"; do
+        [[ -f "$pattern" ]] && sources+=("$pattern")
+    done
+    # shellcheck disable=SC2086  # CXXFLAGS намеренно разворачивается по словам
+    "$CXX" $CXXFLAGS "${INCLUDES[@]}" "${sources[@]}" "$test_src" -o "$BUILD_DIR/$name"
+    echo "==> Запуск $name"
+    "$BUILD_DIR/$name"
+done
 
-echo "==> Запуск тестов ядра"
-"$BUILD_DIR/core_tests"
+echo "OK: все тестовые бинарники ядра пройдены"

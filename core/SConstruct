@@ -13,7 +13,13 @@ env = SConscript("extern/godot-cpp/SConstruct")
 
 env.Append(CPPPATH=["include/", "src/", "extern/entt/single_include/"])
 
-sources = Glob("src/*.cpp") + Glob("src/adapter/*.cpp")
+sources = (
+    Glob("src/*.cpp")
+    + Glob("src/adapter/*.cpp")
+    + Glob("src/ecs/*.cpp")
+    + Glob("src/turn/*.cpp")
+    + Glob("src/net/*.cpp")
+)
 
 # Библиотека кладётся сразу в аддон Godot-проекта; суффикс (платформа/цель/арх)
 # должен совпадать с путями в game/addons/dicecore/dicecore.gdextension.

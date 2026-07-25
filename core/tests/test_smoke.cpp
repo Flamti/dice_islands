@@ -18,7 +18,7 @@ void expect(bool condition, const char *message) {
 
 void test_version() {
     expect(std::strlen(dicecore::kCoreVersion) > 0, "версия ядра непуста");
-    expect(std::string(dicecore::kCoreVersion) == "0.1.0", "версия ядра совпадает с ожидаемой");
+    expect(std::string(dicecore::kCoreVersion) == "0.2.0", "версия ядра совпадает с ожидаемой");
 }
 
 void test_echo_roundtrip() {

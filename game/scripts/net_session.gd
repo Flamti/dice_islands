@@ -8,6 +8,8 @@ signal join_rejected(reason: String)
 signal intent_confirmed(result: Dictionary)
 signal log_message(text: String)
 signal connection_lost
+signal match_started
+signal turn_state_changed(turn_state: Dictionary)
 
 const DEFAULT_PORT := 7777
 const MIN_SLOTS := 2
@@ -18,6 +20,14 @@ const SERVER_PEER_ID := 1 ## фиксированный peer id хоста в Hi
 
 const REJECT_WRONG_PASSWORD := "wrong_password"
 const REJECT_LOBBY_FULL := "lobby_full"
+
+## Дефолты таймеров фаз-решений, сек (SPEC §2.3 [баланс]); 0 — без лимита.
+const DEFAULT_ROLLS_TIMER_SEC := 60.0
+const DEFAULT_DEVELOPMENT_TIMER_SEC := 90.0
+const DEFAULT_RAIDS_TIMER_SEC := 45.0
+## Период трансляции оставшегося времени таймера гостям (SPEC §12.2).
+## ID игрока в партии = индекс слота лобби (см. host_start_match).
+const TURN_TIMER_SYNC_SEC := 1.0
 ## Пауза перед принудительным отключением отклонённого гостя: RPC с причиной
 ## отказа рассылается при poll в конце кадра — мгновенный кик его обгоняет.
 const KICK_DELAY_SEC := 0.5
@@ -33,6 +43,11 @@ var _host_password := ""
 var _pending_join := {}
 ## Реплицируемый стейт лобби: {"slot_count": int, "slots": Array[Dictionary]}.
 var state := {}
+## Партия запущена (истина и у хоста, и у гостей после match_started).
+var match_active := false
+## Последний снапшот хода от ядра (структуру см. DiceCoreServer.get_turn_state).
+var turn_state := {}
+var _timer_sync_accum := 0.0
 
 
 func _ready() -> void:
@@ -82,6 +97,9 @@ func leave() -> void:
 	_host_password = ""
 	_pending_join = {}
 	state = {}
+	match_active = false
+	turn_state = {}
+	_timer_sync_accum = 0.0
 
 
 func core_version() -> String:
@@ -101,6 +119,60 @@ func set_ready(ready: bool) -> void:
 		_host_set_ready(SERVER_PEER_ID, ready)
 	else:
 		_rpc_set_ready.rpc_id(SERVER_PEER_ID, ready)
+
+
+## Барьер фазы-решения (SPEC §12.2): «Готов» внутри партии.
+func set_phase_ready(ready: bool) -> void:
+	submit_intent({
+		"type": "phase_ready",
+		"payload": {"ready": "true" if ready else "false"},
+	})
+
+
+# --- Партия ------------------------------------------------------------------
+
+
+## Старт партии хостом. timers: {"rolls_sec": float, "development_sec": float,
+## "raids_sec": float}; 0 — без лимита. Игроки — занятые слоты лобби,
+## ID игрока = индекс слота.
+func host_start_match(timers: Dictionary) -> bool:
+	if not is_host or match_active:
+		return false
+	var players: Array = []
+	for i in state["slots"].size():
+		var slot: Dictionary = state["slots"][i]
+		if slot["kind"] == SlotKind.EMPTY:
+			continue
+		players.append({"id": i, "team": slot["team"], "is_ai": slot["kind"] == SlotKind.AI})
+	var result: Dictionary = _core.start_match({"players": players, "timers": timers})
+	if not result["ok"]:
+		_broadcast_log("Старт партии отклонён ядром: %s" % result["reason"])
+		return false
+	match_active = true
+	_broadcast_log("Партия началась: игроков %d" % players.size())
+	match_started.emit()
+	if multiplayer.multiplayer_peer != null:
+		_rpc_match_started.rpc()
+	_broadcast_turn_state()
+	return true
+
+
+## Хост тикает ядро каждый кадр; гости получают снапшоты по сети.
+func _process(delta: float) -> void:
+	if not is_host or not match_active:
+		return
+	var events: Array = _core.tick(delta)
+	for event in events:
+		if event["type"] == "turn_started":
+			_broadcast_log("— Ход %s —" % event["payload"]["turn"])
+	var need_sync := not events.is_empty()
+	# Оставшееся время таймера транслируется периодически (SPEC §12.2).
+	if float(turn_state.get("timer_remaining_sec", -1.0)) >= 0.0:
+		_timer_sync_accum += delta
+		if _timer_sync_accum >= TURN_TIMER_SYNC_SEC:
+			need_sync = true
+	if need_sync:
+		_broadcast_turn_state()
 
 
 # --- Управление лобби (только хост) -----------------------------------------
@@ -203,17 +275,40 @@ func _rpc_log_line(text: String) -> void:
 	log_message.emit(text)
 
 
+@rpc("authority", "call_remote", "reliable")
+func _rpc_match_started() -> void:
+	match_active = true
+	match_started.emit()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_receive_turn_state(new_turn_state: Dictionary) -> void:
+	turn_state = new_turn_state
+	turn_state_changed.emit(turn_state)
+
+
 # --- Логика хоста ------------------------------------------------------------
 
 
 func _host_handle_intent(sender: int, intent: Dictionary) -> void:
-	var result: Dictionary = _core.submit_intent(intent)
+	var result: Dictionary = _core.submit_intent(_find_slot_by_peer(sender), intent)
 	var verdict: String = "принято" if result["accepted"] else "отклонено (%s)" % result["reason"]
 	_broadcast_log("Намерение «%s» от peer %d: %s" % [result["type"], sender, verdict])
 	if sender == SERVER_PEER_ID:
 		intent_confirmed.emit(result)
 	else:
 		_rpc_intent_result.rpc_id(sender, result)
+	# Принятое намерение меняет стейт хода (готовность и т.п.) — синхронизируем.
+	if match_active and result["accepted"]:
+		_broadcast_turn_state()
+
+
+func _broadcast_turn_state() -> void:
+	turn_state = _core.get_turn_state()
+	_timer_sync_accum = 0.0
+	turn_state_changed.emit(turn_state)
+	if multiplayer.multiplayer_peer != null:
+		_rpc_receive_turn_state.rpc(turn_state)
 
 
 func _host_set_ready(peer_id: int, ready: bool) -> void:

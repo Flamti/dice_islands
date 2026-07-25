@@ -3,8 +3,11 @@ extends Control
 ## остаются минимальными, вся логика сети — в синглтоне NetSession.
 
 const SmokeRunner := preload("res://scripts/smoke_runner.gd")
+const HudPhase := preload("res://scripts/hud_phase.gd")
+const PhaseBarScene := preload("res://ui/phase_bar.tscn")
 
 const MARGIN_PX := 16
+const TIMER_MAX_SEC := 600
 const LOG_MIN_HEIGHT_PX := 160
 const PORT_MIN := 1024
 const PORT_MAX := 65535
@@ -28,9 +31,16 @@ var _status_label: Label
 var _lobby_panel: VBoxContainer
 var _slots_box: VBoxContainer
 var _slot_count_spin: SpinBox
+var _rolls_timer_spin: SpinBox
+var _dev_timer_spin: SpinBox
+var _raids_timer_spin: SpinBox
+var _start_button: Button
 var _ready_button: CheckButton
 var _echo_edit: LineEdit
 var _log_view: TextEdit
+
+# --- Партия ---
+var _phase_bar: HudPhase
 
 
 func _ready() -> void:
@@ -43,6 +53,7 @@ func _ready() -> void:
 	NetSession.intent_confirmed.connect(_on_intent_confirmed)
 	NetSession.log_message.connect(_append_log)
 	NetSession.connection_lost.connect(_on_connection_lost)
+	NetSession.match_started.connect(_on_match_started)
 
 	_maybe_start_smoke()
 
@@ -106,6 +117,24 @@ func _build_lobby_ui() -> void:
 
 	_slots_box = VBoxContainer.new()
 	_lobby_panel.add_child(_slots_box)
+
+	_rolls_timer_spin = _make_labeled_spin(
+		_lobby_panel, "Таймер Бросков, с (0 — без лимита)", 0, TIMER_MAX_SEC,
+		int(NetSession.DEFAULT_ROLLS_TIMER_SEC)
+	)
+	_dev_timer_spin = _make_labeled_spin(
+		_lobby_panel, "Таймер Развития, с (0 — без лимита)", 0, TIMER_MAX_SEC,
+		int(NetSession.DEFAULT_DEVELOPMENT_TIMER_SEC)
+	)
+	_raids_timer_spin = _make_labeled_spin(
+		_lobby_panel, "Таймер Набегов, с (0 — без лимита)", 0, TIMER_MAX_SEC,
+		int(NetSession.DEFAULT_RAIDS_TIMER_SEC)
+	)
+
+	_start_button = Button.new()
+	_start_button.text = "Начать партию"
+	_start_button.pressed.connect(_on_start_match_pressed)
+	_lobby_panel.add_child(_start_button)
 
 	_ready_button = CheckButton.new()
 	_ready_button.text = "Готов"
@@ -180,6 +209,10 @@ func _show_lobby() -> void:
 	_menu_panel.visible = false
 	_lobby_panel.visible = true
 	_slot_count_spin.get_parent().visible = NetSession.is_host
+	_rolls_timer_spin.get_parent().visible = NetSession.is_host
+	_dev_timer_spin.get_parent().visible = NetSession.is_host
+	_raids_timer_spin.get_parent().visible = NetSession.is_host
+	_start_button.visible = NetSession.is_host
 	_log_view.text = ""
 
 
@@ -216,9 +249,39 @@ func _on_echo_pressed() -> void:
 	NetSession.submit_intent({"type": "echo", "payload": {"message": _echo_edit.text}})
 
 
+func _on_start_match_pressed() -> void:
+	NetSession.host_start_match({
+		"rolls_sec": _rolls_timer_spin.value,
+		"development_sec": _dev_timer_spin.value,
+		"raids_sec": _raids_timer_spin.value,
+	})
+
+
 func _on_leave_pressed() -> void:
 	NetSession.leave()
 	_show_menu()
+
+
+# --- Партия ------------------------------------------------------------------
+
+
+func _on_match_started() -> void:
+	_lobby_panel.visible = false
+	_phase_bar = PhaseBarScene.instantiate()
+	_phase_bar.leave_requested.connect(_on_match_leave_requested)
+	add_child(_phase_bar)
+
+
+func _on_match_leave_requested() -> void:
+	NetSession.leave()
+	_close_phase_bar()
+	_show_menu()
+
+
+func _close_phase_bar() -> void:
+	if _phase_bar != null:
+		_phase_bar.queue_free()
+		_phase_bar = null
 
 
 # --- Реакция на события сети -------------------------------------------------
@@ -296,6 +359,7 @@ func _on_intent_confirmed(result: Dictionary) -> void:
 
 func _on_connection_lost() -> void:
 	_status_label.text = "Соединение потеряно"
+	_close_phase_bar()
 	_show_menu()
 
 
