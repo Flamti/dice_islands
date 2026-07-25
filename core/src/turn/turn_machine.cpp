@@ -139,9 +139,15 @@ void tick(entt::registry &registry, double dt, std::vector<Event> &events,
     const entt::entity match = match_entity(registry);
     auto &state = registry.get<ecs::MatchState>(match);
     const auto &timers = registry.get<const ecs::MatchTimers>(match);
+    if (state.finished) {
+        return; // партия завершена — стейт-машина стоит (SPEC §10)
+    }
 
     double budget = std::max(dt, 0.0);
     for (int32_t guard = 0; guard < kMaxTransitionsPerTick; ++guard) {
+        if (state.finished) {
+            return; // победа определена в хуке фазы Проверок — останавливаемся
+        }
         const Phase phase = static_cast<Phase>(state.phase);
         if (phase_is_decision(phase)) {
             if (all_alive_ready(registry)) {
@@ -233,6 +239,8 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
     const auto *dice_catalog = registry.try_get<const ecs::DiceCatalog>(match);
     const auto *disaster_catalog = registry.try_get<const ecs::DisasterCatalog>(match);
     snapshot.danger_max = disaster_catalog != nullptr ? disaster_catalog->danger_max : 0;
+    snapshot.finished = state.finished;
+    snapshot.winner_team = state.winner_team;
     auto view = registry.view<const ecs::PlayerInfo, const ecs::PhaseReady, const ecs::Resources>();
     for (auto [entity, info, ready, res] : view.each()) {
         PlayerSnapshot player;
@@ -319,6 +327,8 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
             entry.size_z = building.size_z;
             entry.status = building.status;
             entry.hp = building.hp;
+            entry.wonder_stage = building.wonder_stage;
+            entry.wonder_stages = catalog->defs[building.def_index].wonder_stages;
             snapshot.buildings.push_back(std::move(entry));
         }
         std::sort(snapshot.buildings.begin(), snapshot.buildings.end(),

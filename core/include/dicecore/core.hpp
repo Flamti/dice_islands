@@ -110,6 +110,8 @@ inline constexpr const char *kEventExpansion = "expansion"; // платформ�
 inline constexpr const char *kEventBattle = "battle"; // бой на острове разрешён
 inline constexpr const char *kEventTargetChoice = "target_choice"; // выбор цели (2 кандидата)
 inline constexpr const char *kEventLandscape = "landscape"; // деструкция ландшафта
+inline constexpr const char *kEventElimination = "elimination"; // игрок выбыл (SPEC §10)
+inline constexpr const char *kEventVictory = "victory"; // команда победила
 
 // Фазы хода по SPEC §4 (утверждено 25.07.2026).
 enum class Phase : int32_t {
@@ -258,6 +260,8 @@ struct BuildingSnapshot {
     int32_t size_z = 1;
     int32_t status = 0; // BuildingStatus
     int32_t hp = 0;
+    int32_t wonder_stage = 0; // Чудо: текущий этап (0 — не Чудо)
+    int32_t wonder_stages = 0; // Чудо: всего этапов
 };
 
 // Снимок хода для UI: фаза, барьер, оставшееся время таймера.
@@ -268,6 +272,8 @@ struct TurnSnapshot {
     bool is_decision = false;
     double timer_remaining_sec = -1.0; // < 0 — таймера нет (авто-фаза или без лимита)
     int32_t danger_max = 0; // предел шкалы опасности; 0 — система опасности выкл.
+    bool finished = false; // партия завершена (SPEC §10)
+    int32_t winner_team = -1; // команда-победитель; -1 — идёт
     std::vector<PlayerSnapshot> players;
     std::vector<BuildingSnapshot> buildings;
 };

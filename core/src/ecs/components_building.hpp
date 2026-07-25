@@ -36,6 +36,8 @@ struct BuildingDef {
     bool is_wall = false; // стена: разрушаемое препятствие в бою (SPEC §9.3)
     bool is_tower = false; // башня: стреляет в бою
     bool spawns_garrison = false; // казарма/замок: точка спавна защитников
+    int32_t cost_hammers = 1; // молотков за постройку/этап (обычно 1; Чудо — 5)
+    int32_t wonder_stages = 0; // Чудо: число этапов (0 — не Чудо, SPEC §10)
 };
 
 // Компонент сущности партии: каталог зданий и стартовые ресурсы.
@@ -72,6 +74,8 @@ struct Building {
     int32_t status = static_cast<int32_t>(BuildingStatus::UnderConstruction);
     bool expanded = false; // платформа уже достроила леса (SPEC §11.4)
     int32_t restore_turn = 0; // Disabled: ход, с которого здание снова Active
+    int32_t wonder_stage = 0; // Чудо: текущий этап (0 — не Чудо; SPEC §10)
+    int32_t wonder_complete_turn = 0; // ход завершения Чуда (0 — не завершено)
 };
 
 // Свободная клетка в карте занятости (entt::null как uint32).

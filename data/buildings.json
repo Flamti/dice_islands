@@ -109,6 +109,14 @@
       "cost": { "wood": 1, "stone": 3 },
       "hp": 24,
       "is_tower": true
+    },
+    "wonder": {
+      "name": "Чудо",
+      "size_x": 4, "size_z": 4,
+      "cost": { "wood": 20, "stone": 20, "gold": 15 },
+      "hammers": 5,
+      "hp": 80,
+      "wonder_stages": 3
     }
   }
 }

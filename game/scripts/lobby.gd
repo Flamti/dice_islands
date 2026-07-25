@@ -15,6 +15,8 @@ const BattleViewScene := preload("res://scenes/battle_view.tscn")
 const RaidPanelScene := preload("res://ui/raid_panel.tscn")
 const ResearchScreenScene := preload("res://ui/research_screen.tscn")
 const TargetPickScene := preload("res://ui/target_pick.tscn")
+const VictoryScreenScene := preload("res://ui/victory_screen.tscn")
+const SpectatorScene := preload("res://scripts/spectator.gd")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -61,6 +63,8 @@ var _battle_view: Node3D
 var _raid_panel: Control
 var _research_screen: Control
 var _target_pick: Control
+var _victory_screen: Control
+var _spectator: Control
 
 
 func _ready() -> void:
@@ -311,6 +315,12 @@ func _on_match_started() -> void:
 	add_child(_research_screen)
 	_target_pick = TargetPickScene.instantiate()
 	add_child(_target_pick)
+	_victory_screen = VictoryScreenScene.instantiate()
+	_victory_screen.leave_requested.connect(_on_match_leave_requested)
+	add_child(_victory_screen)
+	_spectator = PanelContainer.new()
+	_spectator.set_script(SpectatorScene)
+	add_child(_spectator)
 
 
 func _on_match_leave_requested() -> void:
@@ -353,6 +363,12 @@ func _close_match_view() -> void:
 	if _target_pick != null:
 		_target_pick.queue_free()
 		_target_pick = null
+	if _victory_screen != null:
+		_victory_screen.queue_free()
+		_victory_screen = null
+	if _spectator != null:
+		_spectator.queue_free()
+		_spectator = null
 
 
 # --- Реакция на события сети -------------------------------------------------

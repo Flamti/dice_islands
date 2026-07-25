@@ -15,6 +15,7 @@
 #include "systems/placement.hpp"
 #include "systems/research.hpp"
 #include "systems/upkeep.hpp"
+#include "systems/victory.hpp"
 #include "turn/turn_machine.hpp"
 
 #include <entt/entt.hpp>
@@ -270,6 +271,9 @@ std::vector<Event> Match::tick(double dt) {
                 break;
             case Phase::Combat:
                 systems::combat::resolve_combat_phase(registry, events, battle_logs);
+                break;
+            case Phase::Checks:
+                systems::resolve_checks_phase(registry, events);
                 break;
             default:
                 break;

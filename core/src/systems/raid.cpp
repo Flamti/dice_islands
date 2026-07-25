@@ -105,10 +105,7 @@ IntentResult handle_raid(entt::registry &registry, int32_t player_id, const Inte
     }
     const auto &attacker_info = registry.get<const ecs::PlayerInfo>(attacker);
     const auto &target_info = registry.get<const ecs::PlayerInfo>(target_entity);
-    if (!target_info.alive) {
-        result.reason = kRejectBadRaidTarget;
-        return result;
-    }
+    // Выбывший игрок остаётся руинами — по нему можно грабить (SPEC §10).
     // Союзники (одна команда) не атакуют друг друга (SPEC §9.4).
     if (attacker_info.team == target_info.team) {
         result.reason = kRejectAllyTarget;

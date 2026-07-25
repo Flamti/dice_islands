@@ -201,6 +201,8 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
     out[kKeyIsDecision] = snapshot.is_decision;
     out[kKeyTimerRemaining] = snapshot.timer_remaining_sec;
     out[kKeyDangerMax] = snapshot.danger_max;
+    out["finished"] = snapshot.finished;
+    out["winner_team"] = snapshot.winner_team;
 
     godot::Array players;
     for (const PlayerSnapshot &player : snapshot.players) {
@@ -286,6 +288,8 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
         entry["size_z"] = building.size_z;
         entry[kKeyStatus] = building.status;
         entry[kKeyHp] = building.hp;
+        entry["wonder_stage"] = building.wonder_stage;
+        entry["wonder_stages"] = building.wonder_stages;
         buildings.push_back(entry);
     }
     out[kKeyBuildings] = buildings;

@@ -9,7 +9,7 @@ const PHASE_DEVELOPMENT := 6
 ## Здания, доступные из панели (порядок кнопок). Замок предразмещён и не строится.
 const BUILDABLE_IDS: Array[String] = [
 	"farm", "sawmill", "quarry", "market", "workshop", "barracks", "school",
-	"university", "warehouse", "mill", "port", "platform",
+	"university", "warehouse", "mill", "port", "platform", "wall", "tower", "wonder",
 ]
 
 var _selected_building := "" ## пусто — ничего не выбрано

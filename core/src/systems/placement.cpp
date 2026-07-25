@@ -158,6 +158,8 @@ bool parse_buildings_json(const std::string &json_text, ecs::BuildingCatalog &ca
             def.cost_stone = cost.int_at("stone", 0);
             def.cost_gold = cost.int_at("gold", 0);
         }
+        def.cost_hammers = def_json.int_at("hammers", 1);
+        def.wonder_stages = def_json.int_at("wonder_stages", 0);
         if (def_json.has("cap_bonus")) {
             const save::JsonValue &cap = def_json.as_object().at("cap_bonus");
             def.cap_food = cap.int_at("food", 0);
@@ -280,6 +282,43 @@ IntentResult handle_build(entt::registry &registry, int32_t player_id, const Int
         return result;
     }
 
+    // Чудо строится в несколько этапов (SPEC §10): повторная постройка при
+    // наличии недостроенного Чуда — оплата и продвижение этапа, а не новое.
+    if (def.wonder_stages > 0) {
+        for (auto [entity, building] : registry.view<ecs::Building>().each()) {
+            if (building.player_id != player_id ||
+                    catalog->defs[building.def_index].wonder_stages == 0 ||
+                    building.status == static_cast<int32_t>(BuildingStatus::Destroyed)) {
+                continue;
+            }
+            // Есть Чудо игрока: продвигаем этап, если не завершено.
+            if (building.wonder_stage >= def.wonder_stages) {
+                result.reason = kRejectNotConstructible; // уже достроено
+                return result;
+            }
+            auto &resources = registry.get<ecs::Resources>(player_entity);
+            if (resources.wood < def.cost_wood || resources.stone < def.cost_stone ||
+                    resources.gold < def.cost_gold || resources.hammers < def.cost_hammers) {
+                result.reason = kRejectNotEnoughResources;
+                return result;
+            }
+            resources.wood -= def.cost_wood;
+            resources.stone -= def.cost_stone;
+            resources.gold -= def.cost_gold;
+            resources.hammers -= def.cost_hammers;
+            ++building.wonder_stage;
+            const int32_t turn = registry.get<const ecs::MatchState>(match_entity(registry)).turn;
+            if (building.wonder_stage >= def.wonder_stages) {
+                building.wonder_complete_turn = turn; // достроено — держим 1 ход
+            }
+            result.accepted = true;
+            result.payload[kPayloadBuilding] = def.id;
+            result.payload["stage"] = std::to_string(building.wonder_stage);
+            result.payload["id"] = std::to_string(static_cast<uint32_t>(entity));
+            return result;
+        }
+    }
+
     const int32_t cell_x = parse_cell(intent, kPayloadCellX);
     const int32_t cell_z = parse_cell(intent, kPayloadCellZ);
     const auto &grid = registry.get<const ecs::PlayerGrid>(player_entity);
@@ -294,17 +333,23 @@ IntentResult handle_build(entt::registry &registry, int32_t player_id, const Int
 
     auto &resources = registry.get<ecs::Resources>(player_entity);
     if (resources.wood < def.cost_wood || resources.stone < def.cost_stone ||
-            resources.gold < def.cost_gold || resources.hammers < kHammersPerAction) {
+            resources.gold < def.cost_gold || resources.hammers < def.cost_hammers) {
         result.reason = kRejectNotEnoughResources;
         return result;
     }
     resources.wood -= def.cost_wood;
     resources.stone -= def.cost_stone;
     resources.gold -= def.cost_gold;
-    resources.hammers -= kHammersPerAction;
+    resources.hammers -= def.cost_hammers;
 
+    // Чудо активно сразу (монумент), стройка идёт этапами; прочее — UnderConstruction.
+    const BuildingStatus status =
+            def.wonder_stages > 0 ? BuildingStatus::Active : BuildingStatus::UnderConstruction;
     const entt::entity entity = spawn_building(registry, player_entity, player_id, def_index, def,
-            cell_x, cell_z, BuildingStatus::UnderConstruction);
+            cell_x, cell_z, status);
+    if (def.wonder_stages > 0) {
+        registry.get<ecs::Building>(entity).wonder_stage = 1; // первый этап заложен
+    }
 
     result.accepted = true;
     result.payload[kPayloadBuilding] = def.id;

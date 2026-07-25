@@ -15,6 +15,8 @@ struct MatchState {
     int32_t turn = 0; // номер хода, с 1
     int32_t phase = 0; // фаза 0–9 (dicecore::Phase)
     double phase_elapsed_sec = 0.0; // время в текущей фазе
+    bool finished = false; // партия завершена (есть победитель, SPEC §10)
+    int32_t winner_team = -1; // команда-победитель; -1 — партия идёт
 };
 
 // Таймеры фаз-решений, заданные лобби; <= 0 — без лимита.
