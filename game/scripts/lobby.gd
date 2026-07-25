@@ -6,6 +6,7 @@ const SmokeRunner := preload("res://scripts/smoke_runner.gd")
 const HudPhase := preload("res://scripts/hud_phase.gd")
 const PhaseBarScene := preload("res://ui/phase_bar.tscn")
 const IslandScene := preload("res://scenes/island.tscn")
+const BuildPanelScene := preload("res://ui/build_panel.tscn")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -43,6 +44,7 @@ var _log_view: TextEdit
 # --- Партия ---
 var _phase_bar: HudPhase
 var _island_view: Node3D
+var _build_panel: Control
 
 
 func _ready() -> void:
@@ -275,6 +277,8 @@ func _on_match_started() -> void:
 	_phase_bar = PhaseBarScene.instantiate()
 	_phase_bar.leave_requested.connect(_on_match_leave_requested)
 	add_child(_phase_bar)
+	_build_panel = BuildPanelScene.instantiate()
+	add_child(_build_panel)
 
 
 func _on_match_leave_requested() -> void:
@@ -290,6 +294,9 @@ func _close_match_view() -> void:
 	if _island_view != null:
 		_island_view.queue_free()
 		_island_view = null
+	if _build_panel != null:
+		_build_panel.queue_free()
+		_build_panel = null
 
 
 # --- Реакция на события сети -------------------------------------------------

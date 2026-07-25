@@ -100,5 +100,9 @@ func _rebuild_players(players: Array) -> void:
 		if player["ready"]:
 			tags.append("готов")
 		var suffix: String = " (%s)" % ", ".join(tags) if not tags.is_empty() else ""
-		row.text = "Игрок %d | команда %d%s" % [player["id"] + 1, player["team"], suffix]
+		var res: Dictionary = player["resources"]
+		row.text = "Игрок %d | команда %d%s | Д:%d К:%d З:%d Е:%d М:%d" % [
+			player["id"] + 1, player["team"], suffix,
+			res["wood"], res["stone"], res["gold"], res["food"], res["hammers"],
+		]
 		_players_box.add_child(row)

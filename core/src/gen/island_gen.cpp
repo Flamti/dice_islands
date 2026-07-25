@@ -157,9 +157,8 @@ void compute_normals_and_uvs(IslandData &island, const DensityField &field,
     }
 }
 
-void build_grid(IslandData &island, const DensityField &field, const GeneratorParams &params,
+void build_grid(GridData &grid, const DensityField &field, const GeneratorParams &params,
         float y_top, float y_bottom) {
-    GridData &grid = island.grid;
     grid.cells_x = params.grid_cells;
     grid.cells_z = params.grid_cells;
     grid.cell_size = params.cell_size;
@@ -217,8 +216,7 @@ void build_grid(IslandData &island, const DensityField &field, const GeneratorPa
     }
 }
 
-void place_poi(IslandData &island, const GeneratorParams &params, math::Rng &rng) {
-    GridData &grid = island.grid;
+void place_poi(GridData &grid, const GeneratorParams &params, math::Rng &rng) {
     // Кандидаты в детерминированном порядке обхода сетки.
     std::vector<size_t> candidates;
     for (size_t i = 0; i < grid.types.size(); ++i) {
@@ -333,9 +331,24 @@ IslandData generate_island(uint64_t seed, const GeneratorParams &params) {
     }
 
     compute_normals_and_uvs(island, field, params);
-    build_grid(island, field, params, y_top, y_bottom);
-    place_poi(island, params, rng);
+    build_grid(island.grid, field, params, y_top, y_bottom);
+    place_poi(island.grid, params, rng);
     return island;
+}
+
+GridData generate_grid(uint64_t seed, const GeneratorParams &params) {
+    // Тот же сид, тот же порядок использования RNG, что в generate_island:
+    // сетка и POI обязаны совпадать с клиентской визуализацией байт-в-байт.
+    const math::SimplexNoise noise(seed);
+    math::Rng rng(math::mix_seed(seed, 0xD1CE));
+    const DensityField field{params, noise};
+    const float y_top = params.top_height + params.top_amplitude + 2.0f;
+    const float y_bottom = -(params.bottom_depth + params.bottom_amplitude + 2.0f);
+
+    GridData grid;
+    build_grid(grid, field, params, y_top, y_bottom);
+    place_poi(grid, params, rng);
+    return grid;
 }
 
 } // namespace dicecore::gen

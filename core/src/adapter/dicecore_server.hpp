@@ -19,9 +19,13 @@ class DiceCoreServer : public godot::RefCounted {
 public:
     godot::String get_core_version() const;
 
-    // config: { "players": [{ "id": int, "team": int, "is_ai": bool }],
+    // config: { "players": [{ "id": int, "team": int, "is_ai": bool,
+    //                          "island_seed": int }],
     //           "timers": { "rolls_sec": float, "development_sec": float,
-    //                       "raids_sec": float } }  (<= 0 — без лимита)
+    //                       "raids_sec": float },  (<= 0 — без лимита)
+    //           "generator_json": String, "buildings_json": String }
+    // Тексты конфигов data/*.json читает вызывающая сторона; пустой
+    // buildings_json — партия без зданий и сеток.
     // Возвращает: { "ok": bool, "reason": String }
     godot::Dictionary start_match(const godot::Dictionary &config);
 

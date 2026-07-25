@@ -145,22 +145,33 @@ func set_phase_ready(ready: bool) -> void:
 func host_start_match(timers: Dictionary) -> bool:
 	if not is_host or match_active:
 		return false
+	# Сиды островов: производные от общего сида партии, по одному на игрока.
+	var match_seed := randi()
+	island_seeds = {}
 	var players: Array = []
 	for i in state["slots"].size():
 		var slot: Dictionary = state["slots"][i]
 		if slot["kind"] == SlotKind.EMPTY:
 			continue
-		players.append({"id": i, "team": slot["team"], "is_ai": slot["kind"] == SlotKind.AI})
-	var result: Dictionary = _core.start_match({"players": players, "timers": timers})
+		var island_seed := absi(match_seed + i * ISLAND_SEED_STRIDE)
+		island_seeds[i] = island_seed
+		players.append({
+			"id": i,
+			"team": slot["team"],
+			"is_ai": slot["kind"] == SlotKind.AI,
+			"island_seed": island_seed,
+		})
+	var result: Dictionary = _core.start_match({
+		"players": players,
+		"timers": timers,
+		"generator_json": _read_data_file("generator.json"),
+		"buildings_json": _read_data_file("buildings.json"),
+	})
 	if not result["ok"]:
 		_broadcast_log("Старт партии отклонён ядром: %s" % result["reason"])
+		island_seeds = {}
 		return false
 	match_active = true
-	# Сиды островов: производные от общего сида партии, по одному на игрока.
-	var match_seed := randi()
-	island_seeds = {}
-	for player in players:
-		island_seeds[player["id"]] = absi(match_seed + player["id"] * ISLAND_SEED_STRIDE)
 	_broadcast_log("Партия началась: игроков %d" % players.size())
 	match_started.emit()
 	if multiplayer.multiplayer_peer != null:
@@ -172,6 +183,15 @@ func host_start_match(timers: Dictionary) -> bool:
 ## ID игрока этого клиента (индекс слота) либо -1 до входа в слот.
 func my_player_id() -> int:
 	return _find_slot_by_peer(multiplayer.get_unique_id())
+
+
+## Текст файла из data/ в корне репозитория; пустая строка, если файла нет.
+func _read_data_file(file_name: String) -> String:
+	var path := ProjectSettings.globalize_path("res://").path_join("../data").path_join(file_name)
+	if not FileAccess.file_exists(path):
+		push_warning("Файл данных не найден: %s" % path)
+		return ""
+	return FileAccess.get_file_as_string(path)
 
 
 ## Хост тикает ядро каждый кадр; гости получают снапшоты по сети.

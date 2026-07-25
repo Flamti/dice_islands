@@ -1,6 +1,7 @@
 #include "turn/turn_machine.hpp"
 
 #include "ecs/components.hpp"
+#include "ecs/components_building.hpp"
 
 #include <algorithm>
 #include <string>
@@ -217,6 +218,26 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
     // Порядок итерации EnTT не гарантирован — UI ждёт стабильный список.
     std::sort(snapshot.players.begin(), snapshot.players.end(),
             [](const PlayerSnapshot &a, const PlayerSnapshot &b) { return a.id < b.id; });
+
+    const auto *catalog = registry.try_get<const ecs::BuildingCatalog>(match);
+    if (catalog != nullptr) {
+        auto buildings = registry.view<const ecs::Building>();
+        for (auto [entity, building] : buildings.each()) {
+            BuildingSnapshot entry;
+            entry.id = static_cast<uint32_t>(entity);
+            entry.player_id = building.player_id;
+            entry.type = catalog->defs[building.def_index].id;
+            entry.cell_x = building.cell_x;
+            entry.cell_z = building.cell_z;
+            entry.size_x = building.size_x;
+            entry.size_z = building.size_z;
+            entry.status = building.status;
+            entry.hp = building.hp;
+            snapshot.buildings.push_back(std::move(entry));
+        }
+        std::sort(snapshot.buildings.begin(), snapshot.buildings.end(),
+                [](const BuildingSnapshot &a, const BuildingSnapshot &b) { return a.id < b.id; });
+    }
     return snapshot;
 }
 

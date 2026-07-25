@@ -34,6 +34,12 @@ const char *const kKeyTimerRemaining = "timer_remaining_sec";
 const char *const kKeyRollsSec = "rolls_sec";
 const char *const kKeyDevelopmentSec = "development_sec";
 const char *const kKeyRaidsSec = "raids_sec";
+const char *const kKeyIslandSeed = "island_seed";
+const char *const kKeyGeneratorJson = "generator_json";
+const char *const kKeyBuildingsJson = "buildings_json";
+const char *const kKeyBuildings = "buildings";
+const char *const kKeyStatus = "status";
+const char *const kKeyHp = "hp";
 
 std::string to_std_string(const godot::String &value) {
     return std::string(value.utf8().get_data());
@@ -72,8 +78,11 @@ godot::Dictionary DiceCoreServer::start_match(const godot::Dictionary &config) {
         core_player.id = static_cast<int32_t>(int64_t(player.get(kKeyId, 0)));
         core_player.team = static_cast<int32_t>(int64_t(player.get(kKeyTeam, 1)));
         core_player.is_ai = bool(player.get(kKeyIsAi, false));
+        core_player.island_seed = static_cast<uint64_t>(int64_t(player.get(kKeyIslandSeed, 0)));
         core_config.players.push_back(core_player);
     }
+    core_config.generator_json = to_std_string(config.get(kKeyGeneratorJson, godot::String()));
+    core_config.buildings_json = to_std_string(config.get(kKeyBuildingsJson, godot::String()));
 
     const godot::Dictionary timers = config.get(kKeyTimers, godot::Dictionary());
     core_config.timers.rolls_sec = double(timers.get(kKeyRollsSec, 0.0));
@@ -144,6 +153,22 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
         players.push_back(entry);
     }
     out[kKeyPlayers] = players;
+
+    godot::Array buildings;
+    for (const BuildingSnapshot &building : snapshot.buildings) {
+        godot::Dictionary entry;
+        entry[kKeyId] = static_cast<int64_t>(building.id);
+        entry["player_id"] = building.player_id;
+        entry[kKeyType] = godot::String(building.type.c_str());
+        entry["cell_x"] = building.cell_x;
+        entry["cell_z"] = building.cell_z;
+        entry["size_x"] = building.size_x;
+        entry["size_z"] = building.size_z;
+        entry[kKeyStatus] = building.status;
+        entry[kKeyHp] = building.hp;
+        buildings.push_back(entry);
+    }
+    out[kKeyBuildings] = buildings;
     return out;
 }
 

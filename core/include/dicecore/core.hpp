@@ -14,9 +14,14 @@ inline constexpr const char *kCoreVersion = "0.2.0";
 // Типы намерений, известные ядру на текущем этапе.
 inline constexpr const char *kIntentEcho = "echo";
 inline constexpr const char *kIntentPhaseReady = "phase_ready";
+inline constexpr const char *kIntentBuild = "build";
+inline constexpr const char *kIntentDemolish = "demolish";
 
 // Ключи полезной нагрузки намерений.
 inline constexpr const char *kPayloadReady = "ready";
+inline constexpr const char *kPayloadBuilding = "building";
+inline constexpr const char *kPayloadCellX = "cell_x";
+inline constexpr const char *kPayloadCellZ = "cell_z";
 
 // Коды отказа валидации намерений.
 inline constexpr const char *kRejectUnknownIntent = "unknown_intent_type";
@@ -24,10 +29,33 @@ inline constexpr const char *kRejectEmptyType = "empty_intent_type";
 inline constexpr const char *kRejectNoActiveMatch = "no_active_match";
 inline constexpr const char *kRejectUnknownPlayer = "unknown_player";
 inline constexpr const char *kRejectNotDecisionPhase = "not_decision_phase";
+inline constexpr const char *kRejectWrongPhase = "wrong_phase";
+inline constexpr const char *kRejectUnknownBuilding = "unknown_building";
+inline constexpr const char *kRejectNotConstructible = "not_constructible";
+inline constexpr const char *kRejectOutOfBounds = "out_of_bounds";
+inline constexpr const char *kRejectCellNotBuildable = "cell_not_buildable";
+inline constexpr const char *kRejectCellOccupied = "cell_occupied";
+inline constexpr const char *kRejectNotEnoughResources = "not_enough_resources";
+inline constexpr const char *kRejectNoBuildingHere = "no_building_here";
+inline constexpr const char *kRejectNotYourBuilding = "not_your_building";
+inline constexpr const char *kRejectCastleProtected = "cannot_demolish_castle";
 
 // Коды ошибок старта партии.
 inline constexpr const char *kErrorMatchAlreadyActive = "match_already_active";
 inline constexpr const char *kErrorBadMatchConfig = "bad_match_config";
+inline constexpr const char *kErrorBadBuildingsConfig = "bad_buildings_config";
+inline constexpr const char *kErrorBadGeneratorConfig = "bad_generator_config";
+inline constexpr const char *kErrorNoCastleSpot = "no_castle_spot";
+
+// Статусы зданий (SPEC §5).
+enum class BuildingStatus : int32_t {
+    UnderConstruction = 0, // активируется в фазу 0 следующего хода
+    Active = 1,
+    Starving = 2,
+    Destroyed = 3,
+    Diseased = 4,
+    Disabled = 5,
+};
 
 // Типы событий, порождаемых тиком партии.
 inline constexpr const char *kEventTurnStarted = "turn_started";
@@ -73,11 +101,16 @@ struct PlayerConfig {
     int32_t id = 0; // стабильный ID игрока в партии (индекс слота лобби)
     int32_t team = 1;
     bool is_ai = false;
+    uint64_t island_seed = 0; // сид острова (SPEC §11.1)
 };
 
 struct MatchConfig {
     std::vector<PlayerConfig> players;
     PhaseTimers timers;
+    // Тексты конфигов data/*.json (файлы читает вызывающая сторона).
+    // Пустой buildings_json — партия без зданий и сеток (тесты этапа 2).
+    std::string generator_json;
+    std::string buildings_json;
 };
 
 // Плоское намерение игрока: тип + строковая полезная нагрузка.
@@ -118,6 +151,19 @@ struct PlayerSnapshot {
     int32_t culture = 0;
 };
 
+// Снимок здания для UI.
+struct BuildingSnapshot {
+    uint32_t id = 0; // стабильный ID сущности здания
+    int32_t player_id = 0;
+    std::string type; // id из data/buildings.json ("farm")
+    int32_t cell_x = 0;
+    int32_t cell_z = 0;
+    int32_t size_x = 1;
+    int32_t size_z = 1;
+    int32_t status = 0; // BuildingStatus
+    int32_t hp = 0;
+};
+
 // Снимок хода для UI: фаза, барьер, оставшееся время таймера.
 struct TurnSnapshot {
     bool active = false;
@@ -126,6 +172,7 @@ struct TurnSnapshot {
     bool is_decision = false;
     double timer_remaining_sec = -1.0; // < 0 — таймера нет (авто-фаза или без лимита)
     std::vector<PlayerSnapshot> players;
+    std::vector<BuildingSnapshot> buildings;
 };
 
 // Валидация стейтлес-намерений (echo). Используется и вне активной партии.

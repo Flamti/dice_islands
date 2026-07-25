@@ -1,0 +1,41 @@
+{
+  "starting_resources": { "wood": 6, "stone": 4, "gold": 2, "food": 4, "hammers": 2 },
+  "buildings": {
+    "castle": {
+      "name": "Замок",
+      "size_x": 3, "size_z": 3,
+      "cost": {},
+      "hp": 60,
+      "dice": "universal",
+      "preplaced": true
+    },
+    "farm": {
+      "name": "Ферма",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 4 },
+      "hp": 12,
+      "dice": "food"
+    },
+    "sawmill": {
+      "name": "Лесопилка",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 3, "stone": 1 },
+      "hp": 12,
+      "dice": "wood"
+    },
+    "quarry": {
+      "name": "Каменоломня",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 4, "stone": 1 },
+      "hp": 14,
+      "dice": "stone"
+    },
+    "barracks": {
+      "name": "Казарма",
+      "size_x": 2, "size_z": 2,
+      "cost": { "wood": 2, "stone": 4 },
+      "hp": 20,
+      "dice": "swords"
+    }
+  }
+}

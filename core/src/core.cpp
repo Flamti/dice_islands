@@ -1,6 +1,9 @@
 #include "dicecore/core.hpp"
 
+#include "ecs/components_building.hpp"
+#include "gen/island_gen.hpp"
 #include "net/intents.hpp"
+#include "systems/placement.hpp"
 #include "turn/turn_machine.hpp"
 
 #include <entt/entt.hpp>
@@ -32,6 +35,56 @@ IntentResult process_intent(const Intent &intent) {
 struct Match::Impl {
     entt::registry registry;
     bool active = false;
+
+    entt::entity find_player_entity(int32_t player_id) {
+        for (auto [entity, info] : registry.view<const ecs::PlayerInfo>().each()) {
+            if (info.id == player_id) {
+                return entity;
+            }
+        }
+        return entt::null;
+    }
+
+    // Стройплощадка партии: каталог зданий, сетки островов, стартовые
+    // ресурсы, предразмещённые замки (SPEC §2.2). Вызывается после
+    // turn::start_match, когда сущности партии и игроков уже созданы.
+    bool setup_buildings(const MatchConfig &config, std::string &error) {
+        ecs::BuildingCatalog catalog;
+        std::string parse_error;
+        if (!systems::parse_buildings_json(config.buildings_json, catalog, parse_error)) {
+            error = kErrorBadBuildingsConfig;
+            return false;
+        }
+        gen::GeneratorParams gen_params;
+        if (!config.generator_json.empty() &&
+                !gen::params_from_json(config.generator_json, gen_params, parse_error)) {
+            error = kErrorBadGeneratorConfig;
+            return false;
+        }
+
+        const entt::entity match = registry.view<ecs::MatchState>().front();
+        registry.emplace<ecs::BuildingCatalog>(match, catalog);
+
+        for (const PlayerConfig &player : config.players) {
+            const entt::entity entity = find_player_entity(player.id);
+            const gen::GridData grid_data = gen::generate_grid(player.island_seed, gen_params);
+            auto &grid = registry.emplace<ecs::PlayerGrid>(entity);
+            grid.cells_x = grid_data.cells_x;
+            grid.cells_z = grid_data.cells_z;
+            grid.cell_size = grid_data.cell_size;
+            grid.origin_x = grid_data.origin_x;
+            grid.origin_z = grid_data.origin_z;
+            grid.types = grid_data.types;
+            grid.heights = grid_data.heights;
+            grid.occupancy.assign(grid.types.size(), ecs::kCellFree);
+
+            registry.get<ecs::Resources>(entity) = catalog.starting_resources;
+            if (!systems::preplace_castle(registry, entity, catalog, error)) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 Match::Match() : impl_(std::make_unique<Impl>()) {}
@@ -57,6 +110,11 @@ bool Match::start(const MatchConfig &config, std::string &error) {
 
     std::vector<Event> start_events; // события старта отражены в первом снапшоте
     turn::start_match(impl_->registry, config, start_events);
+    // Пустой buildings_json — партия без зданий и сеток (тесты этапа 2).
+    if (!config.buildings_json.empty() && !impl_->setup_buildings(config, error)) {
+        impl_->registry.clear();
+        return false;
+    }
     impl_->active = true;
     error.clear();
     return true;
@@ -87,8 +145,15 @@ IntentResult Match::submit_intent(int32_t player_id, const Intent &intent) {
 
 std::vector<Event> Match::tick(double dt) {
     std::vector<Event> events;
-    if (impl_->active) {
-        turn::tick(impl_->registry, dt, events);
+    if (!impl_->active) {
+        return events;
+    }
+    turn::tick(impl_->registry, dt, events);
+    // Фаза 0: активация построенного в прошлый ход (SPEC §4).
+    for (const Event &event : events) {
+        if (event.type == kEventPhaseEntered && event.payload.at("phase") == "0") {
+            systems::activate_constructions(impl_->registry);
+        }
     }
     return events;
 }

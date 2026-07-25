@@ -79,4 +79,8 @@ struct IslandData {
 
 IslandData generate_island(uint64_t seed, const GeneratorParams &params);
 
+// Только данные сетки, без полигонизации: быстрый путь для хоста (валидация
+// строительства). Гарантированно совпадает с generate_island(...).grid.
+GridData generate_grid(uint64_t seed, const GeneratorParams &params);
+
 } // namespace dicecore::gen
