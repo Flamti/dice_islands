@@ -1,0 +1,23 @@
+# Локальные ресурсы разработчика (бинарник Godot, офлайн-документация, исходники движка)
+resources/
+
+# Godot
+.godot/
+*.import
+export_presets.cfg
+
+# Сборка C++ / GDExtension
+build/
+bin/
+*.o
+*.os
+*.so
+*.obj
+.sconsign.dblite
+compile_commands.json
+
+# Редакторы и временные файлы
+.vscode/
+.idea/
+*~
+*.swp
