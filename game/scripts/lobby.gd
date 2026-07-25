@@ -7,6 +7,8 @@ const HudPhase := preload("res://scripts/hud_phase.gd")
 const PhaseBarScene := preload("res://ui/phase_bar.tscn")
 const IslandScene := preload("res://scenes/island.tscn")
 const BuildPanelScene := preload("res://ui/build_panel.tscn")
+const DiceTrayScene := preload("res://ui/dice_tray.tscn")
+const ResourceBarScene := preload("res://ui/resource_bar.tscn")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -45,6 +47,8 @@ var _log_view: TextEdit
 var _phase_bar: HudPhase
 var _island_view: Node3D
 var _build_panel: Control
+var _dice_tray: Control
+var _resource_bar: Control
 
 
 func _ready() -> void:
@@ -279,6 +283,10 @@ func _on_match_started() -> void:
 	add_child(_phase_bar)
 	_build_panel = BuildPanelScene.instantiate()
 	add_child(_build_panel)
+	_dice_tray = DiceTrayScene.instantiate()
+	add_child(_dice_tray)
+	_resource_bar = ResourceBarScene.instantiate()
+	add_child(_resource_bar)
 
 
 func _on_match_leave_requested() -> void:
@@ -297,6 +305,12 @@ func _close_match_view() -> void:
 	if _build_panel != null:
 		_build_panel.queue_free()
 		_build_panel = null
+	if _dice_tray != null:
+		_dice_tray.queue_free()
+		_dice_tray = null
+	if _resource_bar != null:
+		_resource_bar.queue_free()
+		_resource_bar = null
 
 
 # --- Реакция на события сети -------------------------------------------------

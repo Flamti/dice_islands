@@ -37,6 +37,13 @@ const char *const kKeyRaidsSec = "raids_sec";
 const char *const kKeyIslandSeed = "island_seed";
 const char *const kKeyGeneratorJson = "generator_json";
 const char *const kKeyBuildingsJson = "buildings_json";
+const char *const kKeyDiceJson = "dice_json";
+const char *const kKeyMatchSeed = "match_seed";
+const char *const kKeyDice = "dice";
+const char *const kKeyFace = "face";
+const char *const kKeyCrosses = "crosses";
+const char *const kKeyGain = "gain";
+const char *const kKeyRerollsLeft = "rerolls_left";
 const char *const kKeyBuildings = "buildings";
 const char *const kKeyStatus = "status";
 const char *const kKeyHp = "hp";
@@ -83,6 +90,8 @@ godot::Dictionary DiceCoreServer::start_match(const godot::Dictionary &config) {
     }
     core_config.generator_json = to_std_string(config.get(kKeyGeneratorJson, godot::String()));
     core_config.buildings_json = to_std_string(config.get(kKeyBuildingsJson, godot::String()));
+    core_config.dice_json = to_std_string(config.get(kKeyDiceJson, godot::String()));
+    core_config.match_seed = static_cast<uint64_t>(int64_t(config.get(kKeyMatchSeed, 0)));
 
     const godot::Dictionary timers = config.get(kKeyTimers, godot::Dictionary());
     core_config.timers.rolls_sec = double(timers.get(kKeyRollsSec, 0.0));
@@ -150,6 +159,25 @@ godot::Dictionary DiceCoreServer::get_turn_state() const {
         resources["swords"] = player.swords;
         resources["culture"] = player.culture;
         entry[kKeyResources] = resources;
+        entry[kKeyRerollsLeft] = player.rerolls_left;
+        godot::Array dice;
+        for (const DieSnapshot &die : player.dice) {
+            godot::Dictionary die_entry;
+            die_entry[kKeyType] = godot::String(die.type.c_str());
+            die_entry[kKeyFace] = die.face;
+            die_entry[kKeyCrosses] = die.crosses;
+            godot::Dictionary gain;
+            gain["wood"] = die.wood;
+            gain["stone"] = die.stone;
+            gain["food"] = die.food;
+            gain["gold"] = die.gold;
+            gain["hammers"] = die.hammers;
+            gain["swords"] = die.swords;
+            gain["culture"] = die.culture;
+            die_entry[kKeyGain] = gain;
+            dice.push_back(die_entry);
+        }
+        entry[kKeyDice] = dice;
         players.push_back(entry);
     }
     out[kKeyPlayers] = players;

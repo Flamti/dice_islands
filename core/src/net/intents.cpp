@@ -1,5 +1,6 @@
 #include "net/intents.hpp"
 
+#include "systems/dice.hpp"
 #include "systems/placement.hpp"
 #include "turn/turn_machine.hpp"
 
@@ -24,6 +25,9 @@ IntentResult dispatch_intent(entt::registry &registry, int32_t player_id, const 
     }
     if (intent.type == kIntentDemolish) {
         return systems::handle_demolish(registry, player_id, intent);
+    }
+    if (intent.type == kIntentReroll) {
+        return systems::handle_reroll(registry, player_id, intent);
     }
     // Стейтлес-намерения (echo) не требуют реестра.
     return process_intent(intent);

@@ -16,12 +16,14 @@ inline constexpr const char *kIntentEcho = "echo";
 inline constexpr const char *kIntentPhaseReady = "phase_ready";
 inline constexpr const char *kIntentBuild = "build";
 inline constexpr const char *kIntentDemolish = "demolish";
+inline constexpr const char *kIntentReroll = "reroll";
 
 // Ключи полезной нагрузки намерений.
 inline constexpr const char *kPayloadReady = "ready";
 inline constexpr const char *kPayloadBuilding = "building";
 inline constexpr const char *kPayloadCellX = "cell_x";
 inline constexpr const char *kPayloadCellZ = "cell_z";
+inline constexpr const char *kPayloadDice = "dice"; // индексы через запятую: "0,2,5"
 
 // Коды отказа валидации намерений.
 inline constexpr const char *kRejectUnknownIntent = "unknown_intent_type";
@@ -39,6 +41,9 @@ inline constexpr const char *kRejectNotEnoughResources = "not_enough_resources";
 inline constexpr const char *kRejectNoBuildingHere = "no_building_here";
 inline constexpr const char *kRejectNotYourBuilding = "not_your_building";
 inline constexpr const char *kRejectCastleProtected = "cannot_demolish_castle";
+inline constexpr const char *kRejectNoRerollsLeft = "no_rerolls_left";
+inline constexpr const char *kRejectBadDiceSelection = "bad_dice_selection";
+inline constexpr const char *kRejectCrossLocked = "cross_locked";
 
 // Коды ошибок старта партии.
 inline constexpr const char *kErrorMatchAlreadyActive = "match_already_active";
@@ -46,6 +51,10 @@ inline constexpr const char *kErrorBadMatchConfig = "bad_match_config";
 inline constexpr const char *kErrorBadBuildingsConfig = "bad_buildings_config";
 inline constexpr const char *kErrorBadGeneratorConfig = "bad_generator_config";
 inline constexpr const char *kErrorNoCastleSpot = "no_castle_spot";
+inline constexpr const char *kErrorBadDiceConfig = "bad_dice_config";
+
+// Максимум перебросов за ход (SPEC §6).
+inline constexpr int32_t kMaxRerolls = 2;
 
 // Статусы зданий (SPEC §5).
 enum class BuildingStatus : int32_t {
@@ -107,10 +116,13 @@ struct PlayerConfig {
 struct MatchConfig {
     std::vector<PlayerConfig> players;
     PhaseTimers timers;
+    uint64_t match_seed = 0; // единственный RNG партии — на хосте (SPEC §12.1)
     // Тексты конфигов data/*.json (файлы читает вызывающая сторона).
-    // Пустой buildings_json — партия без зданий и сеток (тесты этапа 2).
+    // Пустой buildings_json — партия без зданий и сеток (тесты этапа 2);
+    // пустой dice_json — партия без кубиков.
     std::string generator_json;
     std::string buildings_json;
+    std::string dice_json;
 };
 
 // Плоское намерение игрока: тип + строковая полезная нагрузка.
@@ -135,7 +147,21 @@ struct Event {
     std::map<std::string, std::string> payload;
 };
 
-// Снимок игрока для UI: идентичность + ресурсы (этап 2 — нулевые).
+// Снимок кубика в пуле игрока.
+struct DieSnapshot {
+    std::string type; // id из data/dice.json
+    int32_t face = -1; // выпавшая грань 0..5; -1 — не брошен
+    int32_t crosses = 0; // крестов на выпавшей грани (> 0 — переброс запрещён)
+    int32_t wood = 0; // выигрыш грани по ресурсам
+    int32_t stone = 0;
+    int32_t food = 0;
+    int32_t gold = 0;
+    int32_t hammers = 0;
+    int32_t swords = 0;
+    int32_t culture = 0;
+};
+
+// Снимок игрока для UI: идентичность, ресурсы, пул кубиков текущего хода.
 struct PlayerSnapshot {
     int32_t id = 0;
     int32_t team = 1;
@@ -149,6 +175,8 @@ struct PlayerSnapshot {
     int32_t hammers = 0;
     int32_t swords = 0;
     int32_t culture = 0;
+    int32_t rerolls_left = 0;
+    std::vector<DieSnapshot> dice; // пул между Доходом и Ресурсами, иначе пуст
 };
 
 // Снимок здания для UI.

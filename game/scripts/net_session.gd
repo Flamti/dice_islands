@@ -164,8 +164,10 @@ func host_start_match(timers: Dictionary) -> bool:
 	var result: Dictionary = _core.start_match({
 		"players": players,
 		"timers": timers,
+		"match_seed": match_seed,
 		"generator_json": _read_data_file("generator.json"),
 		"buildings_json": _read_data_file("buildings.json"),
+		"dice_json": _read_data_file("dice.json"),
 	})
 	if not result["ok"]:
 		_broadcast_log("Старт партии отклонён ядром: %s" % result["reason"])

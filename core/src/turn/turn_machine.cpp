@@ -79,7 +79,8 @@ void emit_phase_entered(const ecs::MatchState &state, std::vector<Event> &events
 }
 
 // Переход к следующей фазе (с переносом хода после фазы Проверок).
-void advance_phase(entt::registry &registry, ecs::MatchState &state, std::vector<Event> &events) {
+void advance_phase(entt::registry &registry, ecs::MatchState &state, std::vector<Event> &events,
+        const PhaseHook &on_phase_entered) {
     state.phase_elapsed_sec = 0.0;
     state.phase = (state.phase + 1) % kPhaseCount;
     if (state.phase == static_cast<int32_t>(Phase::TurnStart)) {
@@ -91,6 +92,10 @@ void advance_phase(entt::registry &registry, ecs::MatchState &state, std::vector
         auto_ready_ai(registry);
     }
     emit_phase_entered(state, events);
+    if (on_phase_entered) {
+        // Эффекты фазы выполняются до дальнейшего продвижения в этом же тике.
+        on_phase_entered(registry, static_cast<Phase>(state.phase));
+    }
 }
 
 } // namespace
@@ -121,7 +126,8 @@ void start_match(entt::registry &registry, const MatchConfig &config, std::vecto
     emit_phase_entered(state, events);
 }
 
-void tick(entt::registry &registry, double dt, std::vector<Event> &events) {
+void tick(entt::registry &registry, double dt, std::vector<Event> &events,
+        const PhaseHook &on_phase_entered) {
     const entt::entity match = match_entity(registry);
     auto &state = registry.get<ecs::MatchState>(match);
     const auto &timers = registry.get<const ecs::MatchTimers>(match);
@@ -131,7 +137,7 @@ void tick(entt::registry &registry, double dt, std::vector<Event> &events) {
         const Phase phase = static_cast<Phase>(state.phase);
         if (phase_is_decision(phase)) {
             if (all_alive_ready(registry)) {
-                advance_phase(registry, state, events);
+                advance_phase(registry, state, events, on_phase_entered);
                 continue;
             }
             const double limit = phase_time_limit(timers, phase);
@@ -143,9 +149,9 @@ void tick(entt::registry &registry, double dt, std::vector<Event> &events) {
                 state.phase_elapsed_sec += budget;
                 return;
             }
-            // Таймер истёк: решения автозавершаются (этап 2 — решений нет).
+            // Таймер истёк: решения автозавершаются, кубики фиксируются как есть.
             budget -= remaining;
-            advance_phase(registry, state, events);
+            advance_phase(registry, state, events, on_phase_entered);
         } else {
             const double remaining = kAutoPhaseDurationSec - state.phase_elapsed_sec;
             if (budget < remaining) {
@@ -153,7 +159,7 @@ void tick(entt::registry &registry, double dt, std::vector<Event> &events) {
                 return;
             }
             budget -= remaining;
-            advance_phase(registry, state, events);
+            advance_phase(registry, state, events, on_phase_entered);
         }
     }
 }
@@ -198,6 +204,7 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
         snapshot.timer_remaining_sec = limit > 0.0 ? std::max(limit - state.phase_elapsed_sec, 0.0) : -1.0;
     }
 
+    const auto *dice_catalog = registry.try_get<const ecs::DiceCatalog>(match);
     auto view = registry.view<const ecs::PlayerInfo, const ecs::PhaseReady, const ecs::Resources>();
     for (auto [entity, info, ready, res] : view.each()) {
         PlayerSnapshot player;
@@ -213,6 +220,28 @@ TurnSnapshot make_snapshot(const entt::registry &registry) {
         player.hammers = res.hammers;
         player.swords = res.swords;
         player.culture = res.culture;
+        const auto *dice = registry.try_get<const ecs::PlayerDice>(entity);
+        if (dice != nullptr && dice_catalog != nullptr) {
+            player.rerolls_left = dice->rerolls_left;
+            for (const ecs::DieState &die : dice->dice) {
+                const ecs::DiceDef &def = dice_catalog->defs[die.type_index];
+                DieSnapshot entry;
+                entry.type = def.id;
+                entry.face = die.face;
+                if (die.face >= 0) {
+                    const ecs::DieFace &face = def.faces[die.face];
+                    entry.crosses = face.crosses;
+                    entry.wood = face.gain.wood;
+                    entry.stone = face.gain.stone;
+                    entry.food = face.gain.food;
+                    entry.gold = face.gain.gold;
+                    entry.hammers = face.gain.hammers;
+                    entry.swords = face.gain.swords;
+                    entry.culture = face.gain.culture;
+                }
+                player.dice.push_back(std::move(entry));
+            }
+        }
         snapshot.players.push_back(player);
     }
     // Порядок итерации EnTT не гарантирован — UI ждёт стабильный список.

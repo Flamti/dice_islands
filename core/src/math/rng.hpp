@@ -40,6 +40,11 @@ public:
         return min + unit * (max - min);
     }
 
+    // Сырое состояние: для хранения RNG в компоненте партии и в снапшотах.
+    uint64_t raw_state() const {
+        return state_;
+    }
+
 private:
     uint64_t state_;
 };

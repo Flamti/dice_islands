@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 // Компоненты ECS — только плоские данные, без логики (ARCHITECTURE.md §1).
 
@@ -20,6 +22,11 @@ struct MatchTimers {
     double rolls_sec = 0.0;
     double development_sec = 0.0;
     double raids_sec = 0.0;
+};
+
+// Единственный RNG партии (SPEC §12.1): живёт на хосте, попадает в снапшоты.
+struct MatchRng {
+    uint64_t state = 0;
 };
 
 // --- Компоненты сущности игрока ---
@@ -45,6 +52,36 @@ struct Resources {
     int32_t hammers = 0;
     int32_t swords = 0;
     int32_t culture = 0;
+};
+
+// Кубик в пуле игрока текущего хода.
+struct DieState {
+    int32_t type_index = 0; // индекс в DiceCatalog.defs
+    int32_t face = -1; // выпавшая грань 0..5; -1 — не брошен
+};
+
+// Пул кубиков игрока: живёт от фазы Дохода до фазы Ресурсов (SPEC §4).
+struct PlayerDice {
+    std::vector<DieState> dice;
+    int32_t rerolls_left = 0;
+};
+
+// Грань кубика: выигрыш ресурсов и кресты (SPEC §6).
+struct DieFace {
+    Resources gain;
+    int32_t crosses = 0;
+};
+
+// Тип кубика из data/dice.json.
+struct DiceDef {
+    std::string id;
+    DieFace faces[6];
+};
+
+// Компонент сущности партии: каталог кубиков и капы хранения (SPEC §3).
+struct DiceCatalog {
+    std::vector<DiceDef> defs;
+    Resources caps; // 0 — без капа
 };
 
 } // namespace dicecore::ecs

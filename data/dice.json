@@ -1,0 +1,37 @@
+{
+  "caps": { "wood": 20, "stone": 20, "food": 20 },
+  "dice": {
+    "universal": [
+      { "wood": 1 }, { "stone": 1 }, { "food": 1 },
+      { "gold": 1 }, { "hammers": 1 }, { "cross": 1 }
+    ],
+    "food": [
+      { "food": 2 }, { "food": 1 }, { "food": 1 },
+      { "food": 1, "cross": 1 }, { "wood": 1 }, { "cross": 1 }
+    ],
+    "wood": [
+      { "wood": 2 }, { "wood": 1 }, { "wood": 1 },
+      { "wood": 1, "cross": 1 }, { "hammers": 1 }, { "cross": 1 }
+    ],
+    "stone": [
+      { "stone": 2 }, { "stone": 1 }, { "stone": 1 },
+      { "stone": 1, "cross": 1 }, { "hammers": 1 }, { "cross": 1 }
+    ],
+    "gold": [
+      { "gold": 2 }, { "gold": 1 }, { "gold": 1 },
+      { "gold": 1, "cross": 1 }, { "food": 1 }, { "cross": 1 }
+    ],
+    "hammers": [
+      { "hammers": 2 }, { "hammers": 1 }, { "hammers": 1 },
+      { "wood": 1 }, { "stone": 1 }, { "cross": 1 }
+    ],
+    "swords": [
+      { "swords": 2 }, { "swords": 1 }, { "swords": 1 },
+      { "swords": 1, "cross": 1 }, { "cross": 1 }, { "cross": 1 }
+    ],
+    "culture": [
+      { "culture": 2 }, { "culture": 1 }, { "culture": 1 },
+      { "culture": 1, "cross": 1 }, { "gold": 1 }, { "cross": 1 }
+    ]
+  }
+}

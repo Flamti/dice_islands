@@ -2,7 +2,10 @@
 
 #include "ecs/components_building.hpp"
 #include "gen/island_gen.hpp"
+#include "math/rng.hpp"
 #include "net/intents.hpp"
+#include "systems/dice.hpp"
+#include "systems/economy.hpp"
 #include "systems/placement.hpp"
 #include "turn/turn_machine.hpp"
 
@@ -115,6 +118,20 @@ bool Match::start(const MatchConfig &config, std::string &error) {
         impl_->registry.clear();
         return false;
     }
+    if (!config.dice_json.empty()) {
+        ecs::DiceCatalog catalog;
+        std::string parse_error;
+        if (!systems::parse_dice_json(config.dice_json, catalog, parse_error)) {
+            impl_->registry.clear();
+            error = kErrorBadDiceConfig;
+            return false;
+        }
+        const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
+        impl_->registry.emplace<ecs::DiceCatalog>(match, std::move(catalog));
+        // Соль отделяет RNG партии от производных сидов островов.
+        impl_->registry.emplace<ecs::MatchRng>(match,
+                ecs::MatchRng{math::mix_seed(config.match_seed, 0xD1CEB0A7)});
+    }
     impl_->active = true;
     error.clear();
     return true;
@@ -148,13 +165,27 @@ std::vector<Event> Match::tick(double dt) {
     if (!impl_->active) {
         return events;
     }
-    turn::tick(impl_->registry, dt, events);
-    // Фаза 0: активация построенного в прошлый ход (SPEC §4).
-    for (const Event &event : events) {
-        if (event.type == kEventPhaseEntered && event.payload.at("phase") == "0") {
-            systems::activate_constructions(impl_->registry);
+    // Эффекты фаз (SPEC §4) выполняются в момент входа, до продвижения дальше
+    // внутри того же тика: активация -> сбор пула -> бросок -> конвертация.
+    const turn::PhaseHook hook = [](entt::registry &registry, Phase phase) {
+        switch (phase) {
+            case Phase::TurnStart:
+                systems::activate_constructions(registry);
+                break;
+            case Phase::Income:
+                systems::collect_income(registry);
+                break;
+            case Phase::Rolls:
+                systems::roll_initial(registry);
+                break;
+            case Phase::Resources:
+                systems::apply_dice_income(registry);
+                break;
+            default:
+                break;
         }
-    }
+    };
+    turn::tick(impl_->registry, dt, events, hook);
     return events;
 }
 

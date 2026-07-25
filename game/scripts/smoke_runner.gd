@@ -44,6 +44,9 @@ var _build_confirmed := false
 var _reject_seen := false
 var _farm_visible := false
 var _build_spot := Vector2i(-1, -1)
+var _reroll_sent := false
+var _reroll_expected_ok := false
+var _dice_checked := false
 
 
 func _ready() -> void:
@@ -229,11 +232,18 @@ func _mguest_on_turn_state(turn_state: Dictionary) -> void:
 			_fail("сценарий стройки не завершён: принято=%s, отказ=%s, видна=%s" %
 					[_build_confirmed, _reject_seen, _farm_visible])
 			return
+		# Этап 5: кубики и реролл проверены в фазе Бросков.
+		if not _dice_checked:
+			_fail("сценарий кубиков не завершён")
+			return
 		NetSession.leave()
 		_pass_and_quit("SMOKE_MGUEST_OK")
 
 
 func _mguest_on_intent(result: Dictionary) -> void:
+	if result["type"] == "reroll" and _reroll_sent and not _dice_checked:
+		_mguest_on_reroll(result)
+		return
 	if result["type"] != "build":
 		return
 	if not _build_confirmed:
@@ -262,7 +272,35 @@ func _mguest_check_barrier() -> void:
 		_fail("готовность хоста не дошла до гостя за %s с" % BARRIER_HOLD_SEC)
 		return
 	_barrier_checked = true
+	# Этап 5: замок дал кубик, первый бросок сделан; пробуем реролл.
+	var me := _my_player(turn_state)
+	var dice: Array = me.get("dice", [])
+	if dice.is_empty() or int(dice[0]["face"]) < 0:
+		_fail("в фазе Бросков у гостя нет брошенного кубика от замка")
+		return
+	# Грань без креста перебрасывается; грань с крестом — заблокирована.
+	_reroll_expected_ok = int(dice[0]["crosses"]) == 0
+	_reroll_sent = true
+	NetSession.submit_intent({"type": "reroll", "payload": {"dice": "0"}})
+
+
+func _mguest_on_reroll(result: Dictionary) -> void:
+	if _reroll_expected_ok and not result["accepted"]:
+		_fail("реролл грани без креста отклонён: %s" % result["reason"])
+		return
+	if not _reroll_expected_ok and (result["accepted"] or result["reason"] != "cross_locked"):
+		_fail("крест не заблокировал переброс: %s" % result)
+		return
+	_dice_checked = true
 	NetSession.set_phase_ready(true)
+
+
+func _my_player(turn_state: Dictionary) -> Dictionary:
+	var my_id: int = NetSession.my_player_id()
+	for player in turn_state["players"]:
+		if player["id"] == my_id:
+			return player
+	return {}
 
 
 func _is_player_ready(turn_state: Dictionary, player_id: int) -> bool:
