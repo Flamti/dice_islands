@@ -7,7 +7,7 @@ const HudPhase := preload("res://scripts/hud_phase.gd")
 const PhaseBarScene := preload("res://ui/phase_bar.tscn")
 const IslandScene := preload("res://scenes/island.tscn")
 const BuildPanelScene := preload("res://ui/build_panel.tscn")
-const DiceTrayScene := preload("res://ui/dice_tray.tscn")
+const RollScreenScene := preload("res://scenes/roll_screen.tscn")
 const ResourceBarScene := preload("res://ui/resource_bar.tscn")
 const DangerMeterScene := preload("res://ui/danger_meter.tscn")
 const EventFeedScene := preload("res://ui/event_feed.tscn")
@@ -31,6 +31,7 @@ const DEFAULT_ADDRESS := "127.0.0.1"
 const DEFAULT_PLAYER_NAME := "Игрок"
 const DEFAULT_ECHO_MESSAGE := "ping"
 const SMOKE_ARG_PREFIX := "--smoke="
+const PHASE_ROLLS := 3 ## в фазе Броски фоновый HUD прячется — его роль берёт оверлей
 
 # --- Меню ---
 var _menu_panel: VBoxContainer
@@ -59,7 +60,7 @@ var _log_view: TextEdit
 var _phase_bar: HudPhase
 var _island_view: Node3D
 var _build_panel: Control
-var _dice_tray: Control
+var _roll_screen: Control
 var _resource_bar: Control
 var _danger_meter: Control
 var _event_feed: Control
@@ -86,6 +87,7 @@ func _ready() -> void:
 	NetSession.log_message.connect(_append_log)
 	NetSession.connection_lost.connect(_on_connection_lost)
 	NetSession.match_started.connect(_on_match_started)
+	NetSession.turn_state_changed.connect(_on_hud_visibility)
 
 	_maybe_start_smoke()
 
@@ -312,8 +314,8 @@ func _on_match_started() -> void:
 	add_child(_match_ready)
 	_build_panel = BuildPanelScene.instantiate()
 	add_child(_build_panel)
-	_dice_tray = DiceTrayScene.instantiate()
-	add_child(_dice_tray)
+	_roll_screen = RollScreenScene.instantiate()
+	add_child(_roll_screen)
 	_resource_bar = ResourceBarScene.instantiate()
 	add_child(_resource_bar)
 	_danger_meter = DangerMeterScene.instantiate()
@@ -347,6 +349,18 @@ func _on_save_menu_toggled(shown: bool) -> void:
 		_save_menu.visible = shown
 
 
+## В фазе Броски фоновый HUD прячется — его роль берёт полноэкранный экран броска.
+func _on_hud_visibility(turn_state: Dictionary) -> void:
+	if _phase_bar == null or not turn_state.get("active", false):
+		return
+	var rolls: bool = turn_state["phase"] == PHASE_ROLLS
+	_phase_bar.visible = not rolls
+	_resource_bar.visible = not rolls
+	_danger_meter.visible = not rolls
+	_event_feed.visible = not rolls
+	_player_list.visible = not rolls
+
+
 func _on_match_leave_requested() -> void:
 	NetSession.leave()
 	_close_match_view()
@@ -363,9 +377,9 @@ func _close_match_view() -> void:
 	if _build_panel != null:
 		_build_panel.queue_free()
 		_build_panel = null
-	if _dice_tray != null:
-		_dice_tray.queue_free()
-		_dice_tray = null
+	if _roll_screen != null:
+		_roll_screen.queue_free()
+		_roll_screen = null
 	if _resource_bar != null:
 		_resource_bar.queue_free()
 		_resource_bar = null

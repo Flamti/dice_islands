@@ -26,7 +26,7 @@ const DIE_COLORS := {
 	"culture": Color(0.7, 0.5, 0.85),
 }
 const DEFAULT_COLOR := Color(0.8, 0.8, 0.8)
-## Символы ресурсов на гранях (порядок вывода как в dice_tray).
+## Символы ресурсов на гранях (порядок вывода как в roll_screen).
 const GAIN_LABELS := {
 	"wood": "Д", "stone": "К", "food": "Е", "gold": "З",
 	"hammers": "М", "swords": "Меч", "culture": "Кул",

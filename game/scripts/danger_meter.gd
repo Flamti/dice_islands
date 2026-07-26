@@ -2,6 +2,8 @@ extends PanelContainer
 ## Шкала опасности всех игроков (SPEC §7.1): заполнение видно всем как элемент
 ## взаимного давления. Читает danger/danger_max из снапшота хода.
 
+const PHASE_ROLLS := 3 ## в фазе Броски свою шкалу опасности рисует экран броска
+
 var _rows_box: VBoxContainer
 var _bars := {} ## player_id -> ProgressBar
 
@@ -25,7 +27,8 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 		return
 	var danger_max := int(turn_state.get("danger_max", 0))
 	# Система опасности выключена (нет disasters.json) — панель пуста.
-	visible = danger_max > 0
+	# В фазе Броски шкалу рисует полноэкранный экран броска — фоновую прячем.
+	visible = danger_max > 0 and int(turn_state["phase"]) != PHASE_ROLLS
 	if not visible:
 		return
 	for player in turn_state["players"]:

@@ -5,6 +5,7 @@ extends Button
 
 const DIAMETER := 128.0
 const FONT_SIZE := 26
+const PHASE_ROLLS := 3 ## в фазе Броски «Готов» даёт экран броска — фоновую прячем
 const NORMAL_COLOR := Color(0.22, 0.45, 0.28)
 const HOVER_COLOR := Color(0.28, 0.55, 0.35)
 const PRESSED_COLOR := Color(0.3, 0.75, 0.4)
@@ -48,4 +49,4 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 		_last_phase = phase
 		_last_turn = turn
 		set_pressed_no_signal(false)
-	visible = turn_state["is_decision"]
+	visible = turn_state["is_decision"] and turn_state["phase"] != PHASE_ROLLS
