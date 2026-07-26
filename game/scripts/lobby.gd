@@ -18,6 +18,7 @@ const TargetPickScene := preload("res://ui/target_pick.tscn")
 const VictoryScreenScene := preload("res://ui/victory_screen.tscn")
 const SpectatorScene := preload("res://scripts/spectator.gd")
 const SaveMenuScene := preload("res://ui/save_menu.tscn")
+const SoundStubScene := preload("res://scripts/sound_stub.gd")
 
 const MARGIN_PX := 16
 const TIMER_MAX_SEC := 600
@@ -67,6 +68,7 @@ var _target_pick: Control
 var _victory_screen: Control
 var _spectator: Control
 var _save_menu: Control
+var _sound: Node
 
 
 func _ready() -> void:
@@ -325,6 +327,9 @@ func _on_match_started() -> void:
 	add_child(_spectator)
 	_save_menu = SaveMenuScene.instantiate()
 	add_child(_save_menu)
+	_sound = Node.new()
+	_sound.set_script(SoundStubScene)
+	add_child(_sound)
 
 
 func _on_match_leave_requested() -> void:
@@ -376,6 +381,9 @@ func _close_match_view() -> void:
 	if _save_menu != null:
 		_save_menu.queue_free()
 		_save_menu = null
+	if _sound != null:
+		_sound.queue_free()
+		_sound = null
 
 
 # --- Реакция на события сети -------------------------------------------------

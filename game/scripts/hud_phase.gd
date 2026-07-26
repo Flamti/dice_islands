@@ -12,6 +12,19 @@ const PHASE_NAMES: Array[String] = [
 ]
 const DECISION_PHASE_HINT := "Фаза-решение: жмите «Готов» или ждите таймер"
 const AUTO_PHASE_HINT := "Авто-фаза: хост считает результат"
+## Подсказки по фазам хода (SPEC §4) — лента подсказок фаз (этап 15).
+const PHASE_HINTS: Array[String] = [
+	"Активация построек и клеток-лесов; автосейв",
+	"Апкип еды: недокормленные здания голодают",
+	"Активные здания дают кубики в пул",
+	"Бросайте и перебрасывайте кубики (кресты фиксируются)",
+	"Грани превращаются в ресурсы; излишки сверх капа сгорают",
+	"Кресты идут в шкалу опасности; срабатывают катастрофы",
+	"Стройка, снос, исследования, добыча POI, апгрейды",
+	"Отправка рейдов через активный Порт",
+	"Автосимуляция боёв на островах-целях",
+	"Проверка условий победы и выбывания",
+]
 
 var _turn_label: Label
 var _phase_labels: Array[Label] = []
@@ -77,7 +90,9 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 
 	var timer_remaining: float = turn_state["timer_remaining_sec"]
 	_timer_label.text = "Таймер: %d с" % ceili(timer_remaining) if timer_remaining >= 0.0 else "Таймер: —"
-	_hint_label.text = DECISION_PHASE_HINT if is_decision else AUTO_PHASE_HINT
+	var tip: String = PHASE_HINTS[phase] if phase < PHASE_HINTS.size() else ""
+	var mode: String = DECISION_PHASE_HINT if is_decision else AUTO_PHASE_HINT
+	_hint_label.text = "%s — %s" % [tip, mode]
 
 	# Смена фазы (или хода) сбрасывает локальную кнопку готовности.
 	if phase != _last_seen_phase or turn != _last_seen_turn:

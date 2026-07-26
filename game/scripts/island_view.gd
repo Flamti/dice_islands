@@ -4,9 +4,9 @@ extends Node3D
 ## стейта партии), грузит GLB, кладёт оверлей сетки и расставляет острова кольцом.
 
 const GridOverlay := preload("res://scripts/grid_overlay.gd")
-const BuildingStubScene := preload("res://scenes/building_stub.tscn")
 const BuildingStatus := preload("res://scripts/building_status.gd")
 const ScaffoldTileScene := preload("res://scenes/scaffold_tile.tscn")
+const CameraRigScene := preload("res://scenes/world_map.tscn")
 
 const SCAFFOLD_COLOR := Color(0.72, 0.6, 0.38, 0.85)
 const POI_STONE_COLOR := Color(0.55, 0.55, 0.6)
@@ -17,7 +17,6 @@ const ATLAS_TEXTURE := preload("res://assets/atlas_placeholder.png")
 ## Путь к конфигу генератора относительно res:// (data/ живёт в корне репо).
 const GENERATOR_CONFIG_PATH := "../data/generator.json"
 const RING_RADIUS := 60.0
-const CAMERA_OFFSET := Vector3(0, 34, 28)
 const ISLANDS_GROUP := "islands"
 const VIEW_GROUP := "island_view"
 
@@ -27,10 +26,10 @@ const STUB_HEIGHT := 1.6
 const STUB_CASTLE_HEIGHT := 3.0
 const STUB_FOOTPRINT_SCALE := 0.85 ## доля клетки под коробкой (зазор для читаемости)
 
-var _camera: Camera3D
+var _camera_rig: Node3D
 ## player_id -> {"node": Node3D, "grid": Dictionary}
 var _islands := {}
-## id здания -> MeshInstance3D
+## player_id -> MultiMeshInstance3D (инстансинг зданий острова)
 var _building_nodes := {}
 ## player_id -> { "cell_x,cell_z": Node3D } для лесов и POI
 var _scaffold_nodes := {}
@@ -39,8 +38,9 @@ var _poi_nodes := {}
 
 func _ready() -> void:
 	add_to_group(VIEW_GROUP)
-	_camera = Camera3D.new()
-	add_child(_camera)
+	# Обзорная камера — отдельный риг, изолированный от логики (SPEC §14, VR).
+	_camera_rig = CameraRigScene.instantiate()
+	add_child(_camera_rig)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, 30, 0)
@@ -67,7 +67,7 @@ func _ready() -> void:
 			# Коллизия для кликов стройки нужна только на своём острове.
 			_create_collision(island)
 
-	_camera.look_at_from_position(own_position + CAMERA_OFFSET, own_position, Vector3.UP)
+	_camera_rig.focus(own_position)
 
 	NetSession.turn_state_changed.connect(_on_turn_state_changed)
 	NetSession.island_updated.connect(_on_island_updated)
@@ -90,25 +90,57 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 		_sync_pois(int(player["id"]), player.get("pois", []))
 
 
-## Синхронизация заглушек зданий со снапшотом хода.
+## Синхронизация зданий: один MultiMeshInstance3D на остров (инстансинг
+## однотипных заглушек — перф-правка SPEC §14). Буфер инстансов пересобирается
+## из снапшота; трансформ и цвет — на инстанс.
 func _sync_buildings(buildings: Array) -> void:
-	var alive_ids := {}
+	var by_island := {}
 	for building in buildings:
-		var id: int = building["id"]
-		alive_ids[id] = true
-		var info: Dictionary = _islands.get(building["player_id"], {})
-		if info.is_empty():
-			continue
-		var stub: MeshInstance3D = _building_nodes.get(id)
-		if stub == null:
-			stub = BuildingStubScene.instantiate()
-			(info["node"] as Node3D).add_child(stub)
-			_building_nodes[id] = stub
-		_place_stub(stub, building, info["grid"])
-	for id in _building_nodes.keys():
-		if not alive_ids.has(id):
-			_building_nodes[id].queue_free()
-			_building_nodes.erase(id)
+		var pid: int = building["player_id"]
+		if not by_island.has(pid):
+			by_island[pid] = []
+		by_island[pid].append(building)
+	for pid in _islands:
+		_rebuild_building_multimesh(int(pid), by_island.get(pid, []))
+
+
+func _rebuild_building_multimesh(player_id: int, buildings: Array) -> void:
+	var info: Dictionary = _islands.get(player_id, {})
+	if info.is_empty():
+		return
+	var mmi: MultiMeshInstance3D = _building_nodes.get(player_id)
+	if mmi == null:
+		mmi = MultiMeshInstance3D.new()
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = BoxMesh.new()
+		mmi.multimesh = mm
+		var material := StandardMaterial3D.new()
+		material.vertex_color_use_as_albedo = true
+		mmi.material_override = material
+		(info["node"] as Node3D).add_child(mmi)
+		_building_nodes[player_id] = mmi
+	var mm: MultiMesh = mmi.multimesh
+	var grid: Dictionary = info["grid"]
+	mm.instance_count = buildings.size()
+	for i in buildings.size():
+		var b: Dictionary = buildings[i]
+		var height := STUB_CASTLE_HEIGHT if b["type"] == "castle" else STUB_HEIGHT
+		var cx: int = b["cell_x"]
+		var cz: int = b["cell_z"]
+		var cell: float = grid["cell_size"]
+		var heights: PackedFloat32Array = grid["heights"]
+		var cells_x: int = grid["cells_x"]
+		var surface_y: float = heights[cz * cells_x + cx]
+		var basis := Basis().scaled(Vector3(
+			b["size_x"] * cell * STUB_FOOTPRINT_SCALE, height, b["size_z"] * cell * STUB_FOOTPRINT_SCALE))
+		var origin := Vector3(
+			grid["origin_x"] + (cx + b["size_x"] * 0.5) * cell,
+			surface_y + height * 0.5,
+			grid["origin_z"] + (cz + b["size_z"] * 0.5) * cell)
+		mm.set_instance_transform(i, Transform3D(basis, origin))
+		mm.set_instance_color(i, BuildingStatus.color_for(b["type"], int(b["status"])))
 
 
 ## Клетки-леса острова игрока (SPEC §11.4). Для своего острова добавляем
@@ -185,32 +217,6 @@ func _cell_center(grid: Dictionary, cx: int, cz: int, size_x: int, size_z: int) 
 		surface_y,
 		grid["origin_z"] + (cz + size_z * 0.5) * cell
 	)
-
-
-func _place_stub(stub: MeshInstance3D, building: Dictionary, grid: Dictionary) -> void:
-	var cell: float = grid["cell_size"]
-	var heights: PackedFloat32Array = grid["heights"]
-	var cells_x: int = grid["cells_x"]
-	var cx: int = building["cell_x"]
-	var cz: int = building["cell_z"]
-	var height := STUB_CASTLE_HEIGHT if building["type"] == "castle" else STUB_HEIGHT
-	var surface_y: float = heights[cz * cells_x + cx]
-	stub.scale = Vector3(
-		building["size_x"] * cell * STUB_FOOTPRINT_SCALE,
-		height,
-		building["size_z"] * cell * STUB_FOOTPRINT_SCALE
-	)
-	stub.position = Vector3(
-		grid["origin_x"] + (cx + building["size_x"] * 0.5) * cell,
-		surface_y + height * 0.5,
-		grid["origin_z"] + (cz + building["size_z"] * 0.5) * cell
-	)
-	var status: int = building["status"]
-	var material := StandardMaterial3D.new()
-	material.albedo_color = BuildingStatus.color_for(building["type"], status)
-	if BuildingStatus.is_translucent(status):
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	stub.material_override = material
 
 
 func _create_collision(island: Node3D) -> void:
