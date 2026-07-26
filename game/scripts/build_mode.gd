@@ -141,6 +141,16 @@ func _clear_building_selection() -> void:
 	_set_grid(false)
 
 
+## Полная отмена: снять выбор здания и режимы сноса/добычи, спрятать сетку/призрак.
+func _cancel() -> void:
+	_clear_building_selection()
+	_demolish_mode = false
+	_harvest_mode = false
+	_demolish_button.set_pressed_no_signal(false)
+	_harvest_button.set_pressed_no_signal(false)
+	_status_label.text = "Выбор снят"
+
+
 # --- Клик по острову ---------------------------------------------------------
 
 
@@ -148,6 +158,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
 	var active := _selected_building != "" or _demolish_mode or _harvest_mode
+	# Отмена выбора: ESC или правая кнопка мыши — снять выбор, спрятать сетку/призрак.
+	if (event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE) \
+			or (event is InputEventMouseButton and event.pressed \
+				and event.button_index == MOUSE_BUTTON_RIGHT):
+		if active:
+			_cancel()
+			get_viewport().set_input_as_handled()
+		return
 	# Движение мыши — обновляем призрак выбранного здания под курсором.
 	if event is InputEventMouseMotion:
 		_update_ghost(_pick_cell(event.position) if active else Vector2i(-1, -1))
@@ -245,6 +263,9 @@ func _on_intent_confirmed(result: Dictionary) -> void:
 	if result["type"] not in ["build", "demolish", "harvest"]:
 		return
 	if result["accepted"]:
+		# Здание установлено — снимаем выбор, сетка/призрак прячутся до нового выбора.
+		if result["type"] == "build":
+			_clear_building_selection()
 		_status_label.text = "Принято: %s" % result["type"]
 	else:
 		_status_label.text = "Отклонено: %s" % result["reason"]

@@ -34,6 +34,7 @@ func _rebuild_players(players: Array, buildings: Array) -> void:
 	for child in _players_box.get_children():
 		child.queue_free()
 	var starving_by_player := _count_starving(buildings)
+	var my_id := NetSession.my_player_id()
 	for player in players:
 		var row := Label.new()
 		var tags: Array[String] = []
@@ -47,10 +48,15 @@ func _rebuild_players(players: Array, buildings: Array) -> void:
 		if starving > 0:
 			tags.append("голод: %d" % starving)
 		var suffix: String = " (%s)" % ", ".join(tags) if not tags.is_empty() else ""
-		var res: Dictionary = player["resources"]
-		row.text = "Игрок %d | команда %d%s | Д:%d К:%d З:%d Е:%d М:%d" % [
-			player["id"] + 1, player["team"], suffix,
-			res["wood"], res["stone"], res["gold"], res["food"], res["hammers"],
+		# Ресурсы — скрытая информация: показываем только свои.
+		var res_text := ""
+		if int(player["id"]) == my_id:
+			var res: Dictionary = player["resources"]
+			res_text = " | Д:%d К:%d З:%d Е:%d М:%d" % [
+				res["wood"], res["stone"], res["gold"], res["food"], res["hammers"],
+			]
+		row.text = "Игрок %d | команда %d%s%s" % [
+			player["id"] + 1, player["team"], suffix, res_text,
 		]
 		_players_box.add_child(row)
 
