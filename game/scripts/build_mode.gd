@@ -16,6 +16,7 @@ var _selected_building := "" ## пусто — ничего не выбрано
 var _demolish_mode := false
 var _harvest_mode := false
 var _buttons := {} ## id здания -> Button
+var _defs := {} ## id здания -> определение из buildings.json (нужен footprint)
 var _demolish_button: Button
 var _harvest_button: Button
 var _status_label: Label
@@ -36,16 +37,25 @@ func _build_ui() -> void:
 	title.text = "Стройка"
 	box.add_child(title)
 
-	var defs := _load_building_defs()
+	# Список зданий длинный — прячем в скролл, чтобы панель не наезжала на другие.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+
+	_defs = _load_building_defs()
 	for id in BUILDABLE_IDS:
-		if not defs.has(id):
+		if not _defs.has(id):
 			continue
-		var def: Dictionary = defs[id]
+		var def: Dictionary = _defs[id]
 		var button := Button.new()
 		button.text = "%s (%s)" % [def.get("name", id), _cost_text(def.get("cost", {}))]
 		button.toggle_mode = true
 		button.pressed.connect(_on_building_pressed.bind(id))
-		box.add_child(button)
+		list.add_child(button)
 		_buttons[id] = button
 
 	_demolish_button = Button.new()
@@ -100,6 +110,9 @@ func _on_building_pressed(id: String) -> void:
 	_selected_building = "" if _selected_building == id else id
 	for button_id in _buttons:
 		_buttons[button_id].set_pressed_no_signal(button_id == _selected_building)
+	if _selected_building == "":
+		_update_ghost(Vector2i(-1, -1))
+	_set_grid(_selected_building != "")
 	_status_label.text = "Клик по острову — стройка: %s" % _selected_building \
 			if _selected_building != "" else "Выбор снят"
 
@@ -124,13 +137,22 @@ func _clear_building_selection() -> void:
 	_selected_building = ""
 	for button_id in _buttons:
 		_buttons[button_id].set_pressed_no_signal(false)
+	_update_ghost(Vector2i(-1, -1))
+	_set_grid(false)
 
 
 # --- Клик по острову ---------------------------------------------------------
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible or (_selected_building == "" and not _demolish_mode and not _harvest_mode):
+	if not visible:
+		return
+	var active := _selected_building != "" or _demolish_mode or _harvest_mode
+	# Движение мыши — обновляем призрак выбранного здания под курсором.
+	if event is InputEventMouseMotion:
+		_update_ghost(_pick_cell(event.position) if active else Vector2i(-1, -1))
+		return
+	if not active:
 		return
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT):
@@ -180,6 +202,31 @@ func _pick_cell(screen_pos: Vector2) -> Vector2i:
 	return Vector2i(cell_x, cell_z)
 
 
+func _get_view() -> Node:
+	var views := get_tree().get_nodes_in_group("island_view")
+	return views[0] if not views.is_empty() else null
+
+
+## Сетка своего острова видна только при выборе здания (и только в фазе Развития).
+func _set_grid(show: bool) -> void:
+	var view := _get_view()
+	if view != null:
+		view.set_grid_visible(show and visible)
+
+
+## Обновить призрак здания: показать footprint выбранного здания на клетке, либо
+## скрыть (нет выбора здания / курсор вне острова / режим сноса-добычи).
+func _update_ghost(cell: Vector2i) -> void:
+	var view := _get_view()
+	if view == null:
+		return
+	if _selected_building == "" or cell.x < 0:
+		view.hide_build_ghost()
+		return
+	var def: Dictionary = _defs.get(_selected_building, {})
+	view.show_build_ghost(cell.x, cell.y, int(def.get("size_x", 1)), int(def.get("size_z", 1)))
+
+
 # --- Реакция на стейт --------------------------------------------------------
 
 
@@ -187,6 +234,11 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 	if not turn_state.get("active", false):
 		return
 	visible = turn_state["phase"] == PHASE_DEVELOPMENT
+	if not visible:
+		var view := _get_view()
+		if view != null:
+			view.hide_build_ghost()
+			view.set_grid_visible(false)
 
 
 func _on_intent_confirmed(result: Dictionary) -> void:

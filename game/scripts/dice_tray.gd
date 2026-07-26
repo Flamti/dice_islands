@@ -1,23 +1,26 @@
 extends PanelContainer
-## Панель бросков (SPEC §6): свои кубики в фазе Бросков, выбор подмножества
-## для переброса (грани с крестами заблокированы), кнопка реролла.
-## Все правила считает хост; панель лишь отправляет намерение reroll.
+## Панель бросков (SPEC §6): свои кубики в фазе Бросков как 3D-d6 (die3d.gd),
+## выбор подмножества для переброса (грани с крестами заблокированы), кнопка
+## реролла. Все правила считает хост; панель лишь отправляет намерение reroll.
 
 const PHASE_ROLLS := 3
-## Подписи ресурсов на гранях (порядок вывода).
-const GAIN_LABELS := {
-	"wood": "Д", "stone": "К", "food": "Е", "gold": "З",
-	"hammers": "М", "swords": "Меч", "culture": "Кул",
-}
+const Die3DScene := preload("res://scenes/die3d.tscn")
+## Путь к конфигу кубиков относительно res:// (data/ живёт в корне репо).
+const DICE_CONFIG_PATH := "../data/dice.json"
+## Ресурсные ключи граней — для сопоставления выпавшей грани снапшота с конфигом.
+const RESOURCE_KEYS := ["wood", "stone", "food", "gold", "hammers", "swords", "culture"]
 
 var _dice_box: HBoxContainer
 var _reroll_button: Button
 var _info_label: Label
-var _die_buttons: Array[CheckBox] = []
+var _dice: Array = [] ## текущие Die3D
+var _faces_by_type := {} ## тип кубика -> массив из 6 граней (dice.json)
 var _last_signature := "" ## отпечаток пула — чтобы не пересобирать без нужды
 
 
 func _ready() -> void:
+	_faces_by_type = _load_dice_faces()
+
 	var box := VBoxContainer.new()
 	add_child(box)
 
@@ -42,6 +45,18 @@ func _ready() -> void:
 		_on_turn_state_changed(NetSession.turn_state)
 
 
+func _load_dice_faces() -> Dictionary:
+	var path := ProjectSettings.globalize_path("res://").path_join(DICE_CONFIG_PATH)
+	if not FileAccess.file_exists(path):
+		push_warning("Не найден %s — 3D-кубики без граней" % path)
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if parsed == null or not parsed is Dictionary:
+		push_error("Битый dice.json")
+		return {}
+	return parsed.get("dice", {})
+
+
 func _on_turn_state_changed(turn_state: Dictionary) -> void:
 	if not turn_state.get("active", false):
 		return
@@ -57,7 +72,7 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 	_reroll_button.text = "Перебросить выбранные (осталось %d)" % rerolls
 	_reroll_button.disabled = rerolls <= 0
 
-	# Пересборка кнопок только при изменении граней (сохраняет выбор игрока).
+	# Пересборка кубиков только при изменении граней (сохраняет выбор игрока).
 	var signature := "%d|%s" % [rerolls, str(dice)]
 	if signature == _last_signature:
 		return
@@ -68,35 +83,43 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 func _rebuild_dice(dice: Array) -> void:
 	for child in _dice_box.get_children():
 		child.queue_free()
-	_die_buttons.clear()
+	_dice.clear()
 	for die in dice:
-		var button := CheckBox.new()
-		button.text = _face_text(die)
+		var d: Control = Die3DScene.instantiate()
+		_dice_box.add_child(d) # add_child запускает _ready и строит вьюпорт кубика
+		var type: String = die["type"]
+		var faces: Array = _faces_by_type.get(type, [])
+		d.setup(type, faces)
+		var crosses := int(die["crosses"])
+		if not faces.is_empty():
+			d.show_face(_match_face(faces, die.get("gain", {}), crosses))
 		# Блокиратор крестов: грань нельзя выделить для переброса (SPEC §6).
-		button.disabled = die["crosses"] > 0
-		if die["crosses"] > 0:
-			button.tooltip_text = "Крест: грань зафиксирована"
-		_dice_box.add_child(button)
-		_die_buttons.append(button)
+		d.set_disabled(crosses > 0)
+		if crosses > 0:
+			d.tooltip_text = "Крест: грань зафиксирована"
+		_dice.append(d)
 
 
-func _face_text(die: Dictionary) -> String:
-	var parts: Array[String] = []
-	var gain: Dictionary = die["gain"]
-	for key in GAIN_LABELS:
-		if int(gain.get(key, 0)) > 0:
-			parts.append("%d%s" % [int(gain[key]), GAIN_LABELS[key]])
-	for i in int(die["crosses"]):
-		parts.append("✗")
-	if parts.is_empty():
-		parts.append("—")
-	return "[%s] %s" % [die["type"], "+".join(parts)]
+## Индекс грани в конфиге, совпадающей с выпавшей (ресурсы + кресты) или 0.
+func _match_face(faces: Array, gain: Dictionary, crosses: int) -> int:
+	for i in faces.size():
+		var f: Dictionary = faces[i]
+		if int(f.get("cross", 0)) != crosses:
+			continue
+		var ok := true
+		for key in RESOURCE_KEYS:
+			if int(f.get(key, 0)) != int(gain.get(key, 0)):
+				ok = false
+				break
+		if ok:
+			return i
+	return 0
 
 
 func _on_reroll_pressed() -> void:
 	var selected: Array[String] = []
-	for i in _die_buttons.size():
-		if _die_buttons[i].button_pressed:
+	for i in _dice.size():
+		if _dice[i].selected:
 			selected.append(str(i))
 	if selected.is_empty():
 		_info_label.text = "Выберите кубики для переброса"

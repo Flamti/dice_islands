@@ -3,12 +3,11 @@
 [ext_resource type="Script" path="res://scripts/build_mode.gd" id="1"]
 
 [node name="BuildPanel" type="PanelContainer"]
-anchors_preset = 2
-anchor_top = 1.0
+anchors_preset = 9
 anchor_bottom = 1.0
 offset_left = 8.0
-offset_top = -260.0
-offset_right = 260.0
-offset_bottom = -8.0
-grow_vertical = 0
+offset_top = 270.0
+offset_right = 316.0
+offset_bottom = -160.0
+grow_vertical = 2
 script = ExtResource("1")

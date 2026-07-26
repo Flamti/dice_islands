@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/player_list.gd" id="1"]
+
+[node name="PlayerList" type="PanelContainer"]
+anchors_preset = 0
+offset_left = 8.0
+offset_top = 100.0
+offset_right = 360.0
+offset_bottom = 260.0
+script = ExtResource("1")

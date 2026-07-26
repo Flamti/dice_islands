@@ -16,7 +16,10 @@ const POI_MARKER_SIZE := Vector3(0.9, 0.9, 0.9)
 const ATLAS_TEXTURE := preload("res://assets/atlas_placeholder.png")
 ## Путь к конфигу генератора относительно res:// (data/ живёт в корне репо).
 const GENERATOR_CONFIG_PATH := "../data/generator.json"
-const RING_RADIUS := 60.0
+## Острова стоят по сетке 4×4 (16 ячеек), каждая ячейка — область под остров;
+## расстояние между ячейками много больше диаметра острова -> пустота-разделитель.
+const GRID_COLUMNS := 4
+const ISLAND_CELL_SIZE := 80.0
 const ISLANDS_GROUP := "islands"
 const VIEW_GROUP := "island_view"
 
@@ -25,6 +28,7 @@ const VIEW_GROUP := "island_view"
 const STUB_HEIGHT := 1.6
 const STUB_CASTLE_HEIGHT := 3.0
 const STUB_FOOTPRINT_SCALE := 0.85 ## доля клетки под коробкой (зазор для читаемости)
+const GHOST_COLOR := Color(0.95, 0.9, 0.4, 0.45) ## призрак выбранного здания под курсором
 
 var _camera_rig: Node3D
 ## player_id -> {"node": Node3D, "grid": Dictionary}
@@ -34,6 +38,10 @@ var _building_nodes := {}
 ## player_id -> { "cell_x,cell_z": Node3D } для лесов и POI
 var _scaffold_nodes := {}
 var _poi_nodes := {}
+## Призрак здания на своём острове (предпросмотр места стройки).
+var _build_ghost: MeshInstance3D
+## Оверлей строительной сетки — только для своего острова, скрыт по умолчанию.
+var _grid_overlay: Node3D
 
 
 func _ready() -> void:
@@ -54,7 +62,7 @@ func _ready() -> void:
 	var own_position := Vector3.ZERO
 	for index in player_ids.size():
 		var player_id: int = player_ids[index]
-		var island_position := _ring_position(index, player_ids.size())
+		var island_position := _grid_position(index)
 		var island := _build_island(core, player_id, int(NetSession.island_seeds[player_id]), config_text)
 		if island == null:
 			continue
@@ -78,6 +86,43 @@ func _ready() -> void:
 ## Информация об острове игрока для панели стройки: {"node", "grid"} или {}.
 func island_info(player_id: int) -> Dictionary:
 	return _islands.get(player_id, {})
+
+
+## Показать призрак выбранного здания (footprint size_x×size_z в клетках) на клетке
+## своего острова. Только предпросмотр места — валидацию делает ядро при клике.
+func show_build_ghost(cell_x: int, cell_z: int, size_x: int, size_z: int) -> void:
+	var info: Dictionary = _islands.get(NetSession.my_player_id(), {})
+	if info.is_empty():
+		return
+	if _build_ghost == null:
+		_build_ghost = MeshInstance3D.new()
+		_build_ghost.mesh = BoxMesh.new()
+		var material := StandardMaterial3D.new()
+		material.albedo_color = GHOST_COLOR
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_build_ghost.material_override = material
+		(info["node"] as Node3D).add_child(_build_ghost)
+	var grid: Dictionary = info["grid"]
+	var cell: float = grid["cell_size"]
+	var surface_y := _cell_center(grid, cell_x, cell_z, size_x, size_z).y
+	_build_ghost.scale = Vector3(
+		size_x * cell * STUB_FOOTPRINT_SCALE, STUB_HEIGHT, size_z * cell * STUB_FOOTPRINT_SCALE)
+	_build_ghost.position = Vector3(
+		grid["origin_x"] + (cell_x + size_x * 0.5) * cell,
+		surface_y + STUB_HEIGHT * 0.5,
+		grid["origin_z"] + (cell_z + size_z * 0.5) * cell)
+	_build_ghost.visible = true
+
+
+func hide_build_ghost() -> void:
+	if _build_ghost != null:
+		_build_ghost.visible = false
+
+
+## Показ/скрытие оверлея строительной сетки своего острова (управляет build_mode).
+func set_grid_visible(value: bool) -> void:
+	if _grid_overlay != null:
+		_grid_overlay.visible = value
 
 
 func _on_turn_state_changed(turn_state: Dictionary) -> void:
@@ -224,11 +269,12 @@ func _create_collision(island: Node3D) -> void:
 		(child as MeshInstance3D).create_trimesh_collision()
 
 
-func _ring_position(index: int, count: int) -> Vector3:
-	if count <= 1:
-		return Vector3.ZERO
-	var angle := TAU * index / count
-	return Vector3(cos(angle), 0.0, sin(angle)) * RING_RADIUS
+## Позиция острова №index в сетке 4×4, центрированной на нуле.
+func _grid_position(index: int) -> Vector3:
+	var col := index % GRID_COLUMNS
+	var row := int(index / GRID_COLUMNS)
+	var half := (GRID_COLUMNS - 1) * 0.5
+	return Vector3((col - half) * ISLAND_CELL_SIZE, 0.0, (row - half) * ISLAND_CELL_SIZE)
 
 
 func _load_generator_config() -> String:
@@ -253,9 +299,13 @@ func _build_island(core: Object, player_id: int, seed_value: int, config_text: S
 	island.add_child(mesh_root)
 	_apply_atlas_material(mesh_root)
 
-	var overlay: Node3D = GridOverlay.new()
-	overlay.setup(result["grid"])
-	island.add_child(overlay)
+	# Оверлей сетки нужен только на своём острове и только в режиме стройки —
+	# создаём его лишь для себя и держим скрытым (build_mode включает по выбору здания).
+	if player_id == NetSession.my_player_id():
+		_grid_overlay = GridOverlay.new()
+		_grid_overlay.setup(result["grid"])
+		_grid_overlay.visible = false
+		island.add_child(_grid_overlay)
 	_islands[player_id] = {"node": island, "grid": result["grid"], "mesh": mesh_root}
 	return island
 

@@ -6,6 +6,7 @@ extends PanelContainer
 const SAVE_DIR := "user://saves"
 const AUTOSAVE_COUNT := 5 ## кольцо автосейвов (SPEC §13)
 const MANUAL_SLOTS := 3
+const LIST_MIN_SIZE := Vector2(248, 200) ## область списка сейвов (скролл)
 
 var _autosave_index := 0
 var _status: Label
@@ -28,8 +29,13 @@ func _ready() -> void:
 		row.add_child(save_btn)
 		box.add_child(row)
 
+	# Список сейвов растёт с числом слотов — прячем в скролл ограниченной высоты.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = LIST_MIN_SIZE
+	box.add_child(scroll)
 	_list = VBoxContainer.new()
-	box.add_child(_list)
+	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_list)
 	_status = Label.new()
 	box.add_child(_status)
 

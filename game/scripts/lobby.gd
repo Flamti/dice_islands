@@ -18,6 +18,8 @@ const TargetPickScene := preload("res://ui/target_pick.tscn")
 const VictoryScreenScene := preload("res://ui/victory_screen.tscn")
 const SpectatorScene := preload("res://scripts/spectator.gd")
 const SaveMenuScene := preload("res://ui/save_menu.tscn")
+const PlayerListScene := preload("res://ui/player_list.tscn")
+const ReadyButtonScene := preload("res://ui/ready_button.tscn")
 const SoundStubScene := preload("res://scripts/sound_stub.gd")
 
 const MARGIN_PX := 16
@@ -68,6 +70,8 @@ var _target_pick: Control
 var _victory_screen: Control
 var _spectator: Control
 var _save_menu: Control
+var _player_list: Control
+var _match_ready: Control
 var _sound: Node
 
 
@@ -300,7 +304,12 @@ func _on_match_started() -> void:
 	add_child(_island_view)
 	_phase_bar = PhaseBarScene.instantiate()
 	_phase_bar.leave_requested.connect(_on_match_leave_requested)
+	_phase_bar.save_menu_toggled.connect(_on_save_menu_toggled)
 	add_child(_phase_bar)
+	_player_list = PlayerListScene.instantiate()
+	add_child(_player_list)
+	_match_ready = ReadyButtonScene.instantiate()
+	add_child(_match_ready)
 	_build_panel = BuildPanelScene.instantiate()
 	add_child(_build_panel)
 	_dice_tray = DiceTrayScene.instantiate()
@@ -326,10 +335,16 @@ func _on_match_started() -> void:
 	_spectator.set_script(SpectatorScene)
 	add_child(_spectator)
 	_save_menu = SaveMenuScene.instantiate()
+	_save_menu.visible = false # открывается тумблером в полосе фаз (host-only)
 	add_child(_save_menu)
 	_sound = Node.new()
 	_sound.set_script(SoundStubScene)
 	add_child(_sound)
+
+
+func _on_save_menu_toggled(shown: bool) -> void:
+	if _save_menu != null:
+		_save_menu.visible = shown
 
 
 func _on_match_leave_requested() -> void:
@@ -381,6 +396,12 @@ func _close_match_view() -> void:
 	if _save_menu != null:
 		_save_menu.queue_free()
 		_save_menu = null
+	if _player_list != null:
+		_player_list.queue_free()
+		_player_list = null
+	if _match_ready != null:
+		_match_ready.queue_free()
+		_match_ready = null
 	if _sound != null:
 		_sound.queue_free()
 		_sound = null

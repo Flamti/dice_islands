@@ -1,7 +1,7 @@
 {
-  "cell_size": 2.0,
-  "grid_cells": 24,
-  "voxels_per_cell": 2,
+  "cell_size": 1.0,
+  "grid_cells": 48,
+  "voxels_per_cell": 1,
   "island_radius": 16.2,
   "top_height": 5.0,
   "top_amplitude": 1.5,

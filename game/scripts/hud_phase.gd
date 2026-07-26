@@ -1,10 +1,11 @@
 extends VBoxContainer
-## HUD хода: полоса фаз 0–9, таймер, готовность игроков, кнопка «Готов».
-## Читает снапшоты хода из NetSession, сам ничего не считает (логика — в ядре).
+## Верхняя полоса хода: ход, лента фаз 0–9 (текущая выделена), таймер, подсказка,
+## кнопки «Готов»/«Покинуть» и host-only тумблер сохранений. Читает снапшоты хода
+## из NetSession, сам ничего не считает (логика — в ядре). Список игроков вынесен
+## в отдельную панель (player_list.gd), чтобы полоса не наезжала на 3D-вид.
 
 signal leave_requested
-
-const BuildingStatus := preload("res://scripts/building_status.gd")
+signal save_menu_toggled(shown: bool)
 
 const PHASE_NAMES: Array[String] = [
 	"Начало", "Еда", "Доход", "Броски", "Ресурсы",
@@ -30,10 +31,7 @@ var _turn_label: Label
 var _phase_labels: Array[Label] = []
 var _timer_label: Label
 var _hint_label: Label
-var _players_box: VBoxContainer
-var _ready_button: CheckButton
-var _last_seen_phase := -1
-var _last_seen_turn := -1
+var _save_toggle: CheckButton
 
 
 func _ready() -> void:
@@ -44,36 +42,49 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-	_turn_label = Label.new()
-	add_child(_turn_label)
+	# Строка 1: ход | лента фаз | таймер | кнопки.
+	var top_row := _passthrough(HBoxContainer.new())
+	add_child(top_row)
 
-	var phases_row := HBoxContainer.new()
+	_turn_label = _passthrough(Label.new())
+	top_row.add_child(_turn_label)
+
+	var phases_row := _passthrough(HBoxContainer.new())
+	phases_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for i in PHASE_NAMES.size():
-		var phase_label := Label.new()
+		var phase_label := _passthrough(Label.new())
 		phase_label.text = PHASE_NAMES[i]
 		phase_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		phases_row.add_child(phase_label)
 		_phase_labels.append(phase_label)
-	add_child(phases_row)
+	top_row.add_child(phases_row)
 
-	_timer_label = Label.new()
-	add_child(_timer_label)
-
-	_hint_label = Label.new()
-	add_child(_hint_label)
-
-	_players_box = VBoxContainer.new()
-	add_child(_players_box)
-
-	_ready_button = CheckButton.new()
-	_ready_button.text = "Готов"
-	_ready_button.toggled.connect(func(pressed: bool) -> void: NetSession.set_phase_ready(pressed))
-	add_child(_ready_button)
+	_timer_label = _passthrough(Label.new())
+	top_row.add_child(_timer_label)
 
 	var leave_button := Button.new()
-	leave_button.text = "Покинуть партию"
+	leave_button.text = "Покинуть"
 	leave_button.pressed.connect(func() -> void: leave_requested.emit())
-	add_child(leave_button)
+	top_row.add_child(leave_button)
+
+	# Тумблер сохранений — только у хоста (гость не сохраняет/загружает).
+	_save_toggle = CheckButton.new()
+	_save_toggle.text = "Сохранения"
+	_save_toggle.visible = NetSession.is_host
+	_save_toggle.toggled.connect(func(pressed: bool) -> void: save_menu_toggled.emit(pressed))
+	top_row.add_child(_save_toggle)
+
+	# Строка 2: подсказка фазы.
+	_hint_label = _passthrough(Label.new())
+	add_child(_hint_label)
+
+
+## Сделать контрол прозрачным для мыши — чтобы клик по пустой полосе доходил до
+## 3D-вида (стройка ловит его в build_mode._unhandled_input).
+func _passthrough(control: Control) -> Control:
+	control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return control
 
 
 func _on_turn_state_changed(turn_state: Dictionary) -> void:
@@ -93,47 +104,3 @@ func _on_turn_state_changed(turn_state: Dictionary) -> void:
 	var tip: String = PHASE_HINTS[phase] if phase < PHASE_HINTS.size() else ""
 	var mode: String = DECISION_PHASE_HINT if is_decision else AUTO_PHASE_HINT
 	_hint_label.text = "%s — %s" % [tip, mode]
-
-	# Смена фазы (или хода) сбрасывает локальную кнопку готовности.
-	if phase != _last_seen_phase or turn != _last_seen_turn:
-		_last_seen_phase = phase
-		_last_seen_turn = turn
-		_ready_button.set_pressed_no_signal(false)
-	_ready_button.visible = is_decision
-
-	_rebuild_players(turn_state["players"], turn_state.get("buildings", []))
-
-
-func _rebuild_players(players: Array, buildings: Array) -> void:
-	for child in _players_box.get_children():
-		child.queue_free()
-	var starving_by_player := _count_starving(buildings)
-	for player in players:
-		var row := Label.new()
-		var tags: Array[String] = []
-		if player["is_ai"]:
-			tags.append("ИИ")
-		if not player["alive"]:
-			tags.append("выбыл")
-		if player["ready"]:
-			tags.append("готов")
-		var starving := int(starving_by_player.get(player["id"], 0))
-		if starving > 0:
-			tags.append("голод: %d" % starving)
-		var suffix: String = " (%s)" % ", ".join(tags) if not tags.is_empty() else ""
-		var res: Dictionary = player["resources"]
-		row.text = "Игрок %d | команда %d%s | Д:%d К:%d З:%d Е:%d М:%d" % [
-			player["id"] + 1, player["team"], suffix,
-			res["wood"], res["stone"], res["gold"], res["food"], res["hammers"],
-		]
-		_players_box.add_child(row)
-
-
-## player_id -> число зданий со статусом Starving (SPEC §4 фаза 1).
-func _count_starving(buildings: Array) -> Dictionary:
-	var result := {}
-	for building in buildings:
-		if building["status"] == BuildingStatus.STATUS_STARVING:
-			var pid: int = building["player_id"]
-			result[pid] = int(result.get(pid, 0)) + 1
-	return result

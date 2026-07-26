@@ -394,16 +394,17 @@ func _find_build_spot(turn_state: Dictionary) -> Vector2i:
 	return Vector2i(-1, -1)
 
 
-## Острова и сетки всех участников сгенерированы (этап 3).
+## Острова всех участников сгенерированы; оверлей сетки — только для своего.
 func _islands_ok(expected: int) -> bool:
 	if get_tree().get_nodes_in_group("islands").size() != expected:
 		return false
+	# Сетка строительства теперь рисуется лишь на своём острове — ровно один оверлей.
 	var grids := get_tree().get_nodes_in_group("island_grids")
-	if grids.size() != expected:
+	if grids.size() != 1:
 		return false
-	for grid in grids:
-		if grid.buildable_count <= 0 or grid.poi_count <= 0:
-			return false
+	var grid: Node = grids[0]
+	if grid.buildable_count <= 0 or grid.poi_count <= 0:
+		return false
 	return true
 
 
