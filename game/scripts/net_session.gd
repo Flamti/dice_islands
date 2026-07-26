@@ -196,6 +196,29 @@ func my_player_id() -> int:
 	return _find_slot_by_peer(multiplayer.get_unique_id())
 
 
+## Версионированный снапшот стейта партии (только хост; SPEC §13).
+func save_snapshot() -> String:
+	return _core.save() if is_host and match_active else ""
+
+
+## Загрузка снапшота хостом: поднимает партию и пересинхронизирует всех.
+func host_load_snapshot(blob: String) -> bool:
+	if not is_host:
+		return false
+	var result: Dictionary = _core.load(blob)
+	if not result["ok"]:
+		_broadcast_log("Загрузка сейва отклонена ядром: %s" % result["reason"])
+		return false
+	match_active = true
+	# Гости продолжают из снапшота: рассылаем старт партии и стейт хода заново.
+	if multiplayer.multiplayer_peer != null:
+		_rpc_match_started.rpc(island_seeds)
+	match_started.emit()
+	_broadcast_turn_state()
+	_broadcast_log("Партия загружена из сейва")
+	return true
+
+
 ## Текст файла из data/ в корне репозитория; пустая строка, если файла нет.
 func _read_data_file(file_name: String) -> String:
 	var path := ProjectSettings.globalize_path("res://").path_join("../data").path_join(file_name)
@@ -281,6 +304,23 @@ func _rpc_request_join(password: String, player_name: String) -> void:
 	if password != _host_password:
 		_broadcast_log("Отклонено подключение (неверный пароль)")
 		_rpc_join_rejected.rpc_id(sender, REJECT_WRONG_PASSWORD)
+		_kick(sender)
+		return
+	# Реконнект в партию: слот с тем же именем, доигрываемый ИИ, возвращается
+	# вернувшемуся игроку (SPEC §2.3) с выдачей полного снапшота.
+	if match_active:
+		var reclaim := _find_ai_slot_by_name(player_name)
+		if reclaim >= 0:
+			state["slots"][reclaim]["kind"] = SlotKind.HUMAN
+			state["slots"][reclaim]["peer_id"] = sender
+			state["slots"][reclaim]["ready"] = false
+			_core.set_player_ai(reclaim, false)
+			_broadcast_state()
+			_rpc_match_started.rpc_id(sender, island_seeds)
+			_rpc_receive_turn_state.rpc_id(sender, turn_state)
+			_broadcast_log("Игрок «%s» вернулся в слот %d" % [player_name, reclaim + 1])
+			return
+		_rpc_join_rejected.rpc_id(sender, REJECT_LOBBY_FULL)
 		_kick(sender)
 		return
 	var slot_index := _find_free_slot()
@@ -449,8 +489,20 @@ func _on_peer_disconnected(id: int) -> void:
 	if not is_host:
 		return
 	var slot_index := _find_slot_by_peer(id)
-	if slot_index >= 0:
-		var player_name: String = state["slots"][slot_index]["name"]
+	if slot_index < 0:
+		return
+	var player_name: String = state["slots"][slot_index]["name"]
+	if match_active:
+		# Дисконнект в партии: слот немедленно передаётся ИИ (SPEC §2.3), имя
+		# сохраняется для реконнекта по профилю.
+		state["slots"][slot_index]["kind"] = SlotKind.AI
+		state["slots"][slot_index]["peer_id"] = 0
+		state["slots"][slot_index]["ready"] = true
+		_core.set_player_ai(slot_index, true)
+		_broadcast_state()
+		_broadcast_turn_state()
+		_broadcast_log("Игрок «%s» отключился — слот %d доигрывает ИИ" % [player_name, slot_index + 1])
+	else:
 		state["slots"][slot_index] = _make_empty_slot()
 		_broadcast_state()
 		_broadcast_log("Игрок «%s» покинул партию" % player_name)
@@ -498,6 +550,15 @@ func _occupy_slot(slot_index: int, kind: SlotKind, peer_id: int, player_name: St
 func _find_free_slot() -> int:
 	for i in state["slots"].size():
 		if state["slots"][i]["kind"] == SlotKind.EMPTY:
+			return i
+	return -1
+
+
+## Слот, доигрываемый ИИ, с именем name (для реконнекта по профилю). -1, если нет.
+func _find_ai_slot_by_name(player_name: String) -> int:
+	for i in state["slots"].size():
+		var slot: Dictionary = state["slots"][i]
+		if slot["kind"] == SlotKind.AI and slot["name"] == player_name:
 			return i
 	return -1
 

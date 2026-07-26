@@ -191,6 +191,23 @@ godot::Array DiceCoreServer::poll_island_updates() {
     return out;
 }
 
+godot::String DiceCoreServer::save() const {
+    return godot::String(match_.save().c_str());
+}
+
+godot::Dictionary DiceCoreServer::load(const godot::String &json_text) {
+    std::string error;
+    const bool ok = match_.load(to_std_string(json_text), error);
+    godot::Dictionary out;
+    out[kKeyOk] = ok;
+    out[kKeyReason] = godot::String(error.c_str());
+    return out;
+}
+
+void DiceCoreServer::set_player_ai(int32_t player_id, bool is_ai) {
+    match_.set_player_ai(player_id, is_ai);
+}
+
 godot::Dictionary DiceCoreServer::get_turn_state() const {
     const TurnSnapshot snapshot = match_.snapshot();
 
@@ -356,6 +373,10 @@ void DiceCoreServer::_bind_methods() {
     godot::ClassDB::bind_method(godot::D_METHOD("poll_battles"), &DiceCoreServer::poll_battles);
     godot::ClassDB::bind_method(
             godot::D_METHOD("poll_island_updates"), &DiceCoreServer::poll_island_updates);
+    godot::ClassDB::bind_method(godot::D_METHOD("save"), &DiceCoreServer::save);
+    godot::ClassDB::bind_method(godot::D_METHOD("load", "json"), &DiceCoreServer::load);
+    godot::ClassDB::bind_method(
+            godot::D_METHOD("set_player_ai", "player_id", "is_ai"), &DiceCoreServer::set_player_ai);
     godot::ClassDB::bind_method(godot::D_METHOD("get_turn_state"), &DiceCoreServer::get_turn_state);
     godot::ClassDB::bind_method(
             godot::D_METHOD("generate_island", "seed", "config_json"), &DiceCoreServer::generate_island);

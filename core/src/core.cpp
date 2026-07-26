@@ -2,9 +2,11 @@
 
 #include "ecs/components_building.hpp"
 #include "ecs/components_disaster.hpp"
+#include "ecs/components_research.hpp"
 #include "gen/glb_export.hpp"
 #include "gen/island_gen.hpp"
 #include "math/rng.hpp"
+#include "save/json.hpp"
 #include "net/intents.hpp"
 #include "systems/combat/battle.hpp"
 #include "systems/combat/resolve.hpp"
@@ -20,6 +22,8 @@
 
 #include <entt/entt.hpp>
 
+#include <algorithm>
+#include <cstdlib>
 #include <set>
 
 namespace dicecore {
@@ -52,6 +56,7 @@ struct Match::Impl {
     // Параметры генератора и сиды островов — для ре-генерации меша (SPEC §11.5).
     gen::GeneratorParams gen_params;
     std::map<int32_t, uint64_t> island_seeds;
+    MatchConfig config; // конфиг старта — для сериализации сейва (SPEC §13)
 
     entt::entity find_player_entity(int32_t player_id) {
         for (auto [entity, info] : registry.view<const ecs::PlayerInfo>().each()) {
@@ -209,6 +214,7 @@ bool Match::start(const MatchConfig &config, std::string &error) {
         const entt::entity match = impl_->registry.view<ecs::MatchState>().front();
         impl_->registry.emplace<ecs::ResearchCatalog>(match, std::move(catalog));
     }
+    impl_->config = config;
     impl_->active = true;
     error.clear();
     return true;
@@ -312,6 +318,318 @@ std::vector<IslandUpdate> Match::take_island_updates() {
     std::vector<IslandUpdate> updates;
     updates.swap(impl_->island_updates);
     return updates;
+}
+
+namespace {
+
+constexpr int32_t kSaveVersion = 1;
+
+std::string quoted(const std::string &value) {
+    return "\"" + save::escape(value) + "\"";
+}
+
+const ecs::BuildingDef &def_of(const ecs::BuildingCatalog &catalog, const ecs::Building &b) {
+    return catalog.defs[b.def_index];
+}
+
+} // namespace
+
+std::string Match::save() const {
+    entt::registry &reg = impl_->registry;
+    const entt::entity match = reg.view<ecs::MatchState>().front();
+    const auto &state = reg.get<const ecs::MatchState>(match);
+    const auto &rng = reg.get<const ecs::MatchRng>(match);
+    const auto *bcatalog = reg.try_get<const ecs::BuildingCatalog>(match);
+
+    std::string out = "{";
+    out += "\"version\":" + std::to_string(kSaveVersion);
+    out += ",\"match_seed\":\"" + std::to_string(impl_->config.match_seed) + "\"";
+    out += ",\"generator_json\":" + quoted(impl_->config.generator_json);
+    out += ",\"buildings_json\":" + quoted(impl_->config.buildings_json);
+    out += ",\"dice_json\":" + quoted(impl_->config.dice_json);
+    out += ",\"disasters_json\":" + quoted(impl_->config.disasters_json);
+    out += ",\"combat_json\":" + quoted(impl_->config.combat_json);
+    out += ",\"research_json\":" + quoted(impl_->config.research_json);
+    out += ",\"turn\":" + std::to_string(state.turn);
+    out += ",\"finished\":" + std::string(state.finished ? "true" : "false");
+    out += ",\"winner_team\":" + std::to_string(state.winner_team);
+    out += ",\"rng\":\"" + std::to_string(rng.state) + "\"";
+
+    // --- Игроки ---
+    out += ",\"players\":[";
+    bool first_player = true;
+    for (auto [entity, info, res] :
+            reg.view<const ecs::PlayerInfo, const ecs::Resources>().each()) {
+        if (!first_player) {
+            out += ",";
+        }
+        first_player = false;
+        out += "{\"id\":" + std::to_string(info.id);
+        out += ",\"team\":" + std::to_string(info.team);
+        out += ",\"is_ai\":" + std::string(info.is_ai ? "true" : "false");
+        out += ",\"alive\":" + std::string(info.alive ? "true" : "false");
+        out += ",\"island_seed\":\"" + std::to_string(impl_->island_seeds.count(info.id)
+                        ? impl_->island_seeds.at(info.id)
+                        : 0) + "\"";
+        out += ",\"wood\":" + std::to_string(res.wood);
+        out += ",\"stone\":" + std::to_string(res.stone);
+        out += ",\"food\":" + std::to_string(res.food);
+        out += ",\"gold\":" + std::to_string(res.gold);
+        out += ",\"hammers\":" + std::to_string(res.hammers);
+        out += ",\"swords\":" + std::to_string(res.swords);
+        out += ",\"culture\":" + std::to_string(res.culture);
+        const auto *meter = reg.try_get<const ecs::DangerMeter>(entity);
+        out += ",\"danger\":" + std::to_string(meter != nullptr ? meter->value : 0);
+        const auto *cd = reg.try_get<const ecs::PlayerCooldowns>(entity);
+        out += ",\"storm_rite_ready\":" +
+                std::to_string(cd != nullptr ? cd->storm_rite_ready_turn : 0);
+        out += ",\"research\":[";
+        const auto *research = reg.try_get<const ecs::PlayerResearch>(entity);
+        if (research != nullptr) {
+            bool fe = true;
+            for (const std::string &e : research->unlocked) {
+                out += (fe ? "" : ",") + quoted(e);
+                fe = false;
+            }
+        }
+        out += "]";
+        out += ",\"carved\":[";
+        const auto *carved = reg.try_get<const ecs::PlayerCarved>(entity);
+        if (carved != nullptr) {
+            bool fc = true;
+            for (const ecs::CarvedCell &c : carved->cells) {
+                out += (fc ? "" : ",") + ("[" + std::to_string(c.cell_x) + "," +
+                        std::to_string(c.cell_z) + "]");
+                fc = false;
+            }
+        }
+        out += "]";
+        out += ",\"pois\":[";
+        const auto *grid = reg.try_get<const ecs::PlayerGrid>(entity);
+        if (grid != nullptr) {
+            bool fp = true;
+            for (const ecs::PlayerPoi &p : grid->pois) {
+                out += (fp ? "" : ",") + ("[" + std::to_string(p.cell_x) + "," +
+                        std::to_string(p.cell_z) + "," + quoted(p.kind) + "," +
+                        std::to_string(p.amount) + "]");
+                fp = false;
+            }
+        }
+        out += "]}";
+    }
+    out += "]";
+
+    // --- Здания ---
+    out += ",\"buildings\":[";
+    bool first_building = true;
+    if (bcatalog != nullptr) {
+        for (auto [entity, b] : reg.view<const ecs::Building>().each()) {
+            if (!first_building) {
+                out += ",";
+            }
+            first_building = false;
+            out += "{\"player\":" + std::to_string(b.player_id);
+            out += ",\"def\":" + quoted(def_of(*bcatalog, b).id);
+            out += ",\"cell_x\":" + std::to_string(b.cell_x);
+            out += ",\"cell_z\":" + std::to_string(b.cell_z);
+            out += ",\"hp\":" + std::to_string(b.hp);
+            out += ",\"status\":" + std::to_string(b.status);
+            out += ",\"expanded\":" + std::string(b.expanded ? "true" : "false");
+            out += ",\"restore_turn\":" + std::to_string(b.restore_turn);
+            out += ",\"wonder_stage\":" + std::to_string(b.wonder_stage);
+            out += ",\"wonder_complete_turn\":" + std::to_string(b.wonder_complete_turn);
+            out += "}";
+        }
+    }
+    out += "]}";
+    return out;
+}
+
+bool Match::load(const std::string &json_text, std::string &error) {
+    save::JsonValue root;
+    if (!save::parse_json(json_text, root, error) || !root.is_object() ||
+            root.int_at("version", 0) != kSaveVersion) {
+        error = kErrorBadSave;
+        return false;
+    }
+
+    // Реконструируем конфиг старта из сейва.
+    MatchConfig config;
+    config.match_seed = std::strtoull(
+            root.as_object().count("match_seed") ? root.as_object().at("match_seed").as_string().c_str()
+                                                 : "0",
+            nullptr, 10);
+    auto config_str = [&](const char *key) {
+        return root.as_object().count(key) ? root.as_object().at(key).as_string() : std::string();
+    };
+    config.generator_json = config_str("generator_json");
+    config.buildings_json = config_str("buildings_json");
+    config.dice_json = config_str("dice_json");
+    config.disasters_json = config_str("disasters_json");
+    config.combat_json = config_str("combat_json");
+    config.research_json = config_str("research_json");
+    for (const save::JsonValue &pj : root.as_object().at("players").as_array()) {
+        PlayerConfig p;
+        p.id = pj.int_at("id", 0);
+        p.team = pj.int_at("team", 1);
+        p.is_ai = pj.as_object().count("is_ai") && pj.as_object().at("is_ai").as_bool();
+        p.island_seed = std::strtoull(
+                pj.as_object().count("island_seed") ? pj.as_object().at("island_seed").as_string().c_str()
+                                                    : "0",
+                nullptr, 10);
+        config.players.push_back(p);
+    }
+
+    // Чистый старт из конфига (сетки, каталоги, предразмещённые замки).
+    impl_->registry.clear();
+    impl_->island_seeds.clear();
+    impl_->active = false;
+    if (!start(config, error)) {
+        return false;
+    }
+
+    entt::registry &reg = impl_->registry;
+    const entt::entity match = reg.view<ecs::MatchState>().front();
+
+    // Стейт хода и RNG.
+    auto &state = reg.get<ecs::MatchState>(match);
+    state.turn = root.int_at("turn", 1);
+    state.phase = 0; // сейв — на границе хода (SPEC §13)
+    state.phase_elapsed_sec = 0.0;
+    state.finished = root.as_object().count("finished") && root.as_object().at("finished").as_bool();
+    state.winner_team = root.int_at("winner_team", -1);
+    reg.get<ecs::MatchRng>(match).state = std::strtoull(
+            root.as_object().count("rng") ? root.as_object().at("rng").as_string().c_str() : "0",
+            nullptr, 10);
+
+    auto find_player = [&](int32_t id) -> entt::entity {
+        for (auto [e, info] : reg.view<const ecs::PlayerInfo>().each()) {
+            if (info.id == id) {
+                return e;
+            }
+        }
+        return entt::null;
+    };
+
+    // Динамика игроков.
+    for (const save::JsonValue &pj : root.as_object().at("players").as_array()) {
+        const entt::entity e = find_player(pj.int_at("id", 0));
+        if (e == entt::null) {
+            continue;
+        }
+        reg.get<ecs::PlayerInfo>(e).alive =
+                !pj.as_object().count("alive") || pj.as_object().at("alive").as_bool();
+        auto &res = reg.get<ecs::Resources>(e);
+        res.wood = pj.int_at("wood", 0);
+        res.stone = pj.int_at("stone", 0);
+        res.food = pj.int_at("food", 0);
+        res.gold = pj.int_at("gold", 0);
+        res.hammers = pj.int_at("hammers", 0);
+        res.swords = pj.int_at("swords", 0);
+        res.culture = pj.int_at("culture", 0);
+        reg.get_or_emplace<ecs::DangerMeter>(e).value = pj.int_at("danger", 0);
+        reg.get_or_emplace<ecs::PlayerCooldowns>(e).storm_rite_ready_turn =
+                pj.int_at("storm_rite_ready", 0);
+        auto &research = reg.get_or_emplace<ecs::PlayerResearch>(e);
+        research.unlocked.clear();
+        if (pj.as_object().count("research")) {
+            for (const save::JsonValue &r : pj.as_object().at("research").as_array()) {
+                research.unlocked.insert(r.as_string());
+            }
+        }
+        auto *grid = reg.try_get<ecs::PlayerGrid>(e);
+        if (grid != nullptr) {
+            // Вырезанные клетки -> Void; накопление для ре-полигонизации.
+            auto &carved = reg.get_or_emplace<ecs::PlayerCarved>(e);
+            carved.cells.clear();
+            if (pj.as_object().count("carved")) {
+                for (const save::JsonValue &c : pj.as_object().at("carved").as_array()) {
+                    const int32_t cx = static_cast<int32_t>(c.as_array()[0].as_number(0));
+                    const int32_t cz = static_cast<int32_t>(c.as_array()[1].as_number(0));
+                    carved.cells.push_back({cx, cz});
+                    if (grid->in_bounds(cx, cz)) {
+                        grid->types[grid->index_of(cx, cz)] =
+                                static_cast<int32_t>(gen::CellType::Void);
+                    }
+                }
+            }
+            // POI: замещаем оставшимися из сейва.
+            grid->pois.clear();
+            if (pj.as_object().count("pois")) {
+                for (const save::JsonValue &p : pj.as_object().at("pois").as_array()) {
+                    ecs::PlayerPoi poi;
+                    poi.cell_x = static_cast<int32_t>(p.as_array()[0].as_number(0));
+                    poi.cell_z = static_cast<int32_t>(p.as_array()[1].as_number(0));
+                    poi.kind = p.as_array()[2].as_string();
+                    poi.amount = static_cast<int32_t>(p.as_array()[3].as_number(0));
+                    grid->pois.push_back(poi);
+                }
+            }
+        }
+    }
+
+    // Здания: сносим созданные стартом (замки) и восстанавливаем из сейва.
+    reg.view<ecs::Building>().each([&](entt::entity e, ecs::Building &) { reg.destroy(e); });
+    for (auto [e, grid] : reg.view<ecs::PlayerGrid>().each()) {
+        std::fill(grid.occupancy.begin(), grid.occupancy.end(), ecs::kCellFree);
+    }
+    const auto *bcatalog = reg.try_get<const ecs::BuildingCatalog>(match);
+    if (bcatalog != nullptr && root.as_object().count("buildings")) {
+        for (const save::JsonValue &bj : root.as_object().at("buildings").as_array()) {
+            const int32_t def_index = systems::find_building_def(*bcatalog, bj.as_object().count("def")
+                            ? bj.as_object().at("def").as_string()
+                            : "");
+            if (def_index < 0) {
+                continue;
+            }
+            const ecs::BuildingDef &def = bcatalog->defs[def_index];
+            const entt::entity entity = reg.create();
+            auto &b = reg.emplace<ecs::Building>(entity);
+            b.player_id = bj.int_at("player", 0);
+            b.def_index = def_index;
+            b.cell_x = bj.int_at("cell_x", 0);
+            b.cell_z = bj.int_at("cell_z", 0);
+            b.size_x = def.size_x;
+            b.size_z = def.size_z;
+            b.hp = bj.int_at("hp", def.hp);
+            b.status = bj.int_at("status", static_cast<int32_t>(BuildingStatus::Active));
+            b.expanded = bj.as_object().count("expanded") && bj.as_object().at("expanded").as_bool();
+            b.restore_turn = bj.int_at("restore_turn", 0);
+            b.wonder_stage = bj.int_at("wonder_stage", 0);
+            b.wonder_complete_turn = bj.int_at("wonder_complete_turn", 0);
+            // Занятость сетки владельца (руины тоже держат клетки).
+            auto *grid = reg.try_get<ecs::PlayerGrid>(find_player(b.player_id));
+            if (grid != nullptr) {
+                for (int32_t dz = 0; dz < b.size_z; ++dz) {
+                    for (int32_t dx = 0; dx < b.size_x; ++dx) {
+                        if (grid->in_bounds(b.cell_x + dx, b.cell_z + dz)) {
+                            grid->occupancy[grid->index_of(b.cell_x + dx, b.cell_z + dz)] =
+                                    static_cast<uint32_t>(entity);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    error.clear();
+    return true;
+}
+
+void Match::set_player_ai(int32_t player_id, bool is_ai) {
+    for (auto [entity, info] : impl_->registry.view<ecs::PlayerInfo>().each()) {
+        if (info.id != player_id) {
+            continue;
+        }
+        info.is_ai = is_ai;
+        // Слот, переданный ИИ во время фазы-решения, сразу готов — иначе барьер
+        // текущей фазы завис бы без человека (SPEC §2.3, §12.2).
+        if (is_ai) {
+            if (auto *ready = impl_->registry.try_get<ecs::PhaseReady>(entity)) {
+                ready->ready = true;
+            }
+        }
+        return;
+    }
 }
 
 TurnSnapshot Match::snapshot() const {

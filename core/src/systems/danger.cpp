@@ -99,7 +99,17 @@ std::vector<int32_t> opponents_of(const entt::registry &registry, int32_t player
     return opponents;
 }
 
-// Здания игрока (не разрушенные), в порядке ID сущностей.
+// Стабильный порядок зданий по клетке (не по ID сущности) — воспроизводится
+// после загрузки сейва (SPEC §13), поэтому выбор цели RNG детерминирован.
+bool building_before(const entt::registry &registry, entt::entity a, entt::entity b) {
+    const auto &ba = registry.get<const ecs::Building>(a);
+    const auto &bb = registry.get<const ecs::Building>(b);
+    if (ba.player_id != bb.player_id) return ba.player_id < bb.player_id;
+    if (ba.cell_z != bb.cell_z) return ba.cell_z < bb.cell_z;
+    return ba.cell_x < bb.cell_x;
+}
+
+// Здания игрока (не разрушенные), в стабильном порядке (клетка).
 std::vector<entt::entity> buildings_of(entt::registry &registry, int32_t player_id,
         bool active_only) {
     std::vector<entt::entity> result;
@@ -115,7 +125,8 @@ std::vector<entt::entity> buildings_of(entt::registry &registry, int32_t player_
         }
         result.push_back(entity);
     }
-    std::sort(result.begin(), result.end());
+    std::sort(result.begin(), result.end(),
+            [&registry](entt::entity a, entt::entity b) { return building_before(registry, a, b); });
     return result;
 }
 
@@ -246,7 +257,8 @@ void apply_storm(const ecs::DisasterDef &def, entt::registry &registry, int32_t 
         }
     }
     // 4 урона случайным 3 наземным зданиям.
-    std::sort(land.begin(), land.end());
+    std::sort(land.begin(), land.end(),
+            [&registry](entt::entity a, entt::entity b) { return building_before(registry, a, b); });
     for (int32_t n = 0; n < land_targets && !land.empty(); ++n) {
         const int32_t idx = rng.range_int(0, static_cast<int32_t>(land.size()) - 1);
         damage_building(registry, land[idx], land_dmg);
@@ -413,7 +425,8 @@ void spread_disease(entt::registry &registry, const ecs::DisasterCatalog &catalo
             sources.push_back(entity);
         }
     }
-    std::sort(sources.begin(), sources.end());
+    std::sort(sources.begin(), sources.end(),
+            [&registry](entt::entity a, entt::entity b) { return building_before(registry, a, b); });
     for (const entt::entity src : sources) {
         if (rng.range_int(1, 100) > percent) {
             continue;
@@ -429,7 +442,8 @@ void spread_disease(entt::registry &registry, const ecs::DisasterCatalog &catalo
         if (neighbors.empty()) {
             continue;
         }
-        std::sort(neighbors.begin(), neighbors.end());
+        std::sort(neighbors.begin(), neighbors.end(),
+                [&registry](entt::entity a, entt::entity b) { return building_before(registry, a, b); });
         const entt::entity victim =
                 neighbors[rng.range_int(0, static_cast<int32_t>(neighbors.size()) - 1)];
         registry.get<ecs::Building>(victim).status = static_cast<int32_t>(BuildingStatus::Diseased);

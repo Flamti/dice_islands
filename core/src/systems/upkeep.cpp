@@ -54,7 +54,13 @@ void apply_food_upkeep(entt::registry &registry) {
                 eaters.push_back(entity);
             }
         }
-        std::sort(eaters.begin(), eaters.end());
+        // Стабильный порядок по клетке (не по ID сущности) — воспроизводится
+        // после загрузки сейва (SPEC §13), тасование RNG затем детерминировано.
+        std::sort(eaters.begin(), eaters.end(), [&registry](entt::entity a, entt::entity b) {
+            const auto &ba = registry.get<const ecs::Building>(a);
+            const auto &bb = registry.get<const ecs::Building>(b);
+            return ba.cell_z != bb.cell_z ? ba.cell_z < bb.cell_z : ba.cell_x < bb.cell_x;
+        });
 
         auto &resources = registry.get<ecs::Resources>(player_entity);
         const int32_t fed = std::min(resources.food / kFoodPerBuilding,

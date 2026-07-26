@@ -53,4 +53,7 @@ private:
 // Разбор текста. При ошибке возвращает false и описание в error.
 bool parse_json(const std::string &text, JsonValue &out, std::string &error);
 
+// Экранирование строки для вставки в JSON (без кавычек-обёрток).
+std::string escape(const std::string &value);
+
 } // namespace dicecore::save

@@ -48,6 +48,13 @@ public:
     // [{ "player": int, "glb": PackedByteArray }].
     godot::Array poll_island_updates();
 
+    // Версионированный JSON-снапшот полного стейта (SPEC §13).
+    godot::String save() const;
+    // Загрузка партии из снапшота. Возвращает { "ok": bool, "reason": String }.
+    godot::Dictionary load(const godot::String &json_text);
+    // Передача слота ИИ / возврат человеку (дисконнект/реконнект, SPEC §2.3).
+    void set_player_ai(int32_t player_id, bool is_ai);
+
     // Снапшот хода: { "active": bool, "turn": int, "phase": int,
     //   "is_decision": bool, "timer_remaining_sec": float (< 0 — нет таймера),
     //   "players": [{ "id", "team", "is_ai", "alive", "ready", "resources" }] }

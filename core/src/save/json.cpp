@@ -273,6 +273,24 @@ JsonValue JsonValue::make_array(JsonArray value) {
     return out;
 }
 
+std::string escape(const std::string &value) {
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (const char c : value) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\t': out += "\\t"; break;
+            case '\r': out += "\\r"; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            default: out.push_back(c); break;
+        }
+    }
+    return out;
+}
+
 bool parse_json(const std::string &text, JsonValue &out, std::string &error) {
     Parser parser{text, 0, {}};
     if (!parser.parse_value(out)) {

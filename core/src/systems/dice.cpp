@@ -127,10 +127,12 @@ void collect_income(entt::registry &registry) {
         return; // партия без кубиков или без зданий
     }
 
-    // Кубики зданий в порядке ID сущностей — стабильные индексы пула.
+    // Кубики зданий в стабильном порядке (игрок, клетка) — не зависит от ID
+    // сущности, поэтому пул воспроизводится после загрузки сейва (SPEC §13).
     struct Collected {
-        uint32_t building_id;
         int32_t player_id;
+        int32_t cell_z;
+        int32_t cell_x;
         int32_t die_index;
         int32_t food_bonus;
     };
@@ -160,10 +162,13 @@ void collect_income(entt::registry &registry) {
             }
         }
         collected.push_back(
-                {static_cast<uint32_t>(entity), building.player_id, die_index, food_bonus});
+                {building.player_id, building.cell_z, building.cell_x, die_index, food_bonus});
     }
-    std::sort(collected.begin(), collected.end(),
-            [](const Collected &a, const Collected &b) { return a.building_id < b.building_id; });
+    std::sort(collected.begin(), collected.end(), [](const Collected &a, const Collected &b) {
+        if (a.player_id != b.player_id) return a.player_id < b.player_id;
+        if (a.cell_z != b.cell_z) return a.cell_z < b.cell_z;
+        return a.cell_x < b.cell_x;
+    });
 
     for (auto [entity, dice] : registry.view<ecs::PlayerDice>().each()) {
         dice.dice.clear();

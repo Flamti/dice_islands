@@ -88,6 +88,7 @@ inline constexpr const char *kErrorBadDiceConfig = "bad_dice_config";
 inline constexpr const char *kErrorBadDisastersConfig = "bad_disasters_config";
 inline constexpr const char *kErrorBadCombatConfig = "bad_combat_config";
 inline constexpr const char *kErrorBadResearchConfig = "bad_research_config";
+inline constexpr const char *kErrorBadSave = "bad_save";
 
 // Максимум перебросов за ход (SPEC §6).
 inline constexpr int32_t kMaxRerolls = 2;
@@ -335,6 +336,16 @@ public:
 
     // Забрать обновления мешей островов после деструкции ландшафта (SPEC §11.5).
     std::vector<IslandUpdate> take_island_updates();
+
+    // Версионированный JSON-снапшот полного стейта (SPEC §13). Сохраняется на
+    // границе хода (фаза 0); середина фазы не сериализуется.
+    std::string save() const;
+
+    // Загрузка партии из снапшота save(). При ошибке — false и код в error.
+    bool load(const std::string &json_text, std::string &error);
+
+    // Передача слота ИИ / возврат человеку (дисконнект/реконнект, SPEC §2.3).
+    void set_player_ai(int32_t player_id, bool is_ai);
 
     TurnSnapshot snapshot() const;
 
